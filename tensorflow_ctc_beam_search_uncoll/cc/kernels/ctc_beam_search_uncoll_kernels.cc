@@ -13,9 +13,9 @@
 
 using namespace tensorflow;
 
-class CTCBeamSearchUncolldOp : public OpKernel {
+class CTCBeamSearchUncollOp : public OpKernel {
   public:
-    explicit CTCBeamSearchUncollOp(OpKernelContext *ctx) : OpKernel(ctx) {
+    explicit CTCBeamSearchUncollOp(OpKernelConstruction *ctx) : OpKernel(ctx) {
       //OP_REQUIRES_OK(ctx, ctx->GetAttr("beam_width", &beam_width_));
       //OP_REQUIRES_OK(ctx, ctx->GetAttr("blank", &blank));
       //OP_REQUIRES_OK(ctx, ctx->GetAttr("def_val", &def_val));
@@ -23,12 +23,12 @@ class CTCBeamSearchUncolldOp : public OpKernel {
 
     void Compute(OpKernelContext* ctx) override {
       // Grab the input tensor
-      const Tensor& input_tensor = context->input(0);
+      const Tensor& input_tensor = ctx->input(0);
       auto input = input_tensor.flat<int32>();
 
       // Create an output tensor
       Tensor* output_tensor = NULL;
-      OP_REQUIRES_OK(context, context->allocate_output(0, input_tensor.shape(),
+      OP_REQUIRES_OK(ctx, ctx->allocate_output(0, input_tensor.shape(),
                                                        &output_tensor));
       auto output_flat = output_tensor->flat<int32>();
 
