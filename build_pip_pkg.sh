@@ -55,6 +55,7 @@ function main() {
   touch "${TMPDIR}"/stub.cc
   rsync -avm -L --exclude='*_test.py' ${PIP_FILE_PREFIX}tensorflow_zero_out "${TMPDIR}"
   rsync -avm -L --exclude='*_test.py' ${PIP_FILE_PREFIX}tensorflow_time_two "${TMPDIR}"
+  rsync -avm -L --exclude='*_test.py' ${PIP_FILE_PREFIX}tensorflow_ctc_beam_search_uncoll "${TMPDIR}"
 
   pushd ${TMPDIR}
   echo $(date) : "=== Building wheel"
