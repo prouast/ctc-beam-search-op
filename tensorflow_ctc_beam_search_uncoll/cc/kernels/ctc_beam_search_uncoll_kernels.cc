@@ -16,30 +16,36 @@ using namespace tensorflow;
 class CTCBeamSearchUncollOp : public OpKernel {
   public:
     explicit CTCBeamSearchUncollOp(OpKernelConstruction *ctx) : OpKernel(ctx) {
-      //OP_REQUIRES_OK(ctx, ctx->GetAttr("beam_width", &beam_width_));
-      //OP_REQUIRES_OK(ctx, ctx->GetAttr("blank", &blank));
-      //OP_REQUIRES_OK(ctx, ctx->GetAttr("def_val", &def_val));
+      OP_REQUIRES_OK(ctx, ctx->GetAttr("beam_width", &beam_width_));
+      OP_REQUIRES_OK(ctx, ctx->GetAttr("blank", &blank_));
+      OP_REQUIRES_OK(ctx, ctx->GetAttr("def_val", &def_val_));
     }
 
     void Compute(OpKernelContext* ctx) override {
       // Grab the input tensor
       const Tensor& input_tensor = ctx->input(0);
-      auto input = input_tensor.flat<int32>();
+      auto input = input_tensor.flat<float>();
 
-      // Create an output tensor
-      Tensor* output_tensor = NULL;
+      // Create output tensors
+      Tensor* output_tensor_c = NULL;
+      Tensor* output_tensor_u = NULL;
       OP_REQUIRES_OK(ctx, ctx->allocate_output(0, input_tensor.shape(),
-                                                       &output_tensor));
-      auto output_flat = output_tensor->flat<int32>();
+                                                       &output_tensor_c));
+      OP_REQUIRES_OK(ctx, ctx->allocate_output(1, input_tensor.shape(),
+                                                       &output_tensor_u));
+      auto output_flat_c = output_tensor_c->flat<int32>();
+      auto output_flat_u = output_tensor_u->flat<int32>();
 
       // Set all but the first element of the output tensor to 0.
       const int N = input.size();
-      for (int i = 1; i < N; i++) {
-        output_flat(i) = 0;
+      for (int i = 0; i < N; i++) {
+        output_flat_c(i) = 0;
+        output_flat_u(i) = 0;
       }
 
-      // Preserve the first input value if possible.
-      if (N > 0) output_flat(0) = input(0);
+      // Set first output value to 1 / 2 if possible.
+      if (N > 0) output_flat_c(0) = beam_width_;
+      if (N > 0) output_flat_u(0) = beam_width_;
 
       // Read inputs and allocate outputs
       //const Tensor* inputs;
@@ -137,10 +143,11 @@ class CTCBeamSearchUncollOp : public OpKernel {
     //  return Status::OK();
     //}
 
-  //private:
-  //  bool merge_repeated_;
-  //  int beam_width_;
-  //  TF_DISALLOW_COPY_AND_ASSIGN(CTCBeamSearchDecoderOp);
+  private:
+    int beam_width_;
+    int blank_;
+    int def_val_;
+    TF_DISALLOW_COPY_AND_ASSIGN(CTCBeamSearchUncollOp);
 };
 
 REGISTER_KERNEL_BUILDER(Name("CTCBeamSearchUncoll").Device(DEVICE_CPU),
