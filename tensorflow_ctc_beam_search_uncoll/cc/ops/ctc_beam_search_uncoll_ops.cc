@@ -7,7 +7,7 @@ using namespace tensorflow;
 
 REGISTER_OP("CTCBeamSearchUncoll")
     .Input("inputs: float")
-    .Attr("sequence_length: int")
+    .Input("sequence_length: int32")
     .Attr("beam_width: int")
     .Attr("blank: int=0")
     .Attr("def_val: int=0")
