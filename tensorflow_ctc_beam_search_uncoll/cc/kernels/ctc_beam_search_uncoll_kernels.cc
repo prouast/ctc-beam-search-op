@@ -1,6 +1,7 @@
 //#define EIGEN_USE_THREADS
 
 //#include <limits>
+#include <cstdint>
 
 //#include "tensorflow/core/util/ctc/ctc_beam_search.h"
 //#include "tensorflow/core/framework/op.h"
@@ -36,36 +37,28 @@ class CTCBeamSearchUncollOp : public OpKernel {
       //OP_REQUIRES_OK(ctx, ValidateInputsGenerateOutputs(ctx, &inputs, &seq_len,
       //  &log_prob, &decoded_indices, &decoded_values, &decoded_shape));
 
-      auto inputs_t = inputs->flat<float>();
+      // Save variables as specific types
+      auto inputs_t = inputs->tensor<float, 3>();
+      auto seq_len_t = seq_len->vec<int32>();
       auto outputs_c_t = outputs_c->flat<int32>();
       auto outputs_u_t = outputs_u->flat<int32>();
-
-      // Set all but the first element of the output tensor to 0.
-      const int N = inputs_t.size();
-      for (int i = 0; i < N; i++) {
-        outputs_c_t(i) = 0;
-        outputs_u_t(i) = 0;
-      }
-
-      // Set first output value to 1 / 2 if possible.
-      if (N > 0) outputs_c_t(0) = beam_width_;
-      if (N > 0) outputs_u_t(0) = beam_width_;
-
-      // Save variables as specific tensorflow types
-      //auto inputs_t = inputs->tensor<float, 3>();
-      //auto seq_len_t = seq_len->vec<int32>();
       //auto log_prob_t = log_prob->matrix<float>();
       //log_prob_t.setZero();
+
       // Save shape of inputs and specific input dimensions
-      //const TensorShape& inputs_shape = inputs->shape();
-      //const int64 max_time = inputs_shape.dim_size(0);
-      //const int64 batch_size = inputs_shape.dim_size(1);
-      //const int64 num_classes = inputs_shape.dim_size(2);
-      // For every time step, copy  ???
-      //std::vector<TTypes<float>::UnalignedConstMatrix> input_list_t;
-      //for (std::size_t t = 0; t < max_time; ++t) {
-      //  input_list_t.emplace_back(inputs_t.data() + t * batch_size * num_classes, batch_size, num_classes);
-      //}
+      const TensorShape& inputs_shape = inputs->shape();
+      const int64 max_time = inputs_shape.dim_size(0);
+      const int64 batch_size = inputs_shape.dim_size(1);
+      const int64 num_classes = inputs_shape.dim_size(2);
+
+      // For every time step, copy elements into input_list_t
+      std::vector<TTypes<float>::UnalignedConstMatrix> input_list_t;
+      for (std::size_t t = 0; t < max_time; ++t) {
+        input_list_t.emplace_back(inputs_t.data() + t * batch_size * num_classes,
+                                  batch_size, num_classes);
+      }
+
+      
       // ...
       // Iterate over all batch elements
       //for (int b = 0; b < batch_size; ++b) {
@@ -79,6 +72,18 @@ class CTCBeamSearchUncollOp : public OpKernel {
       //  // beam search Reset
       //}
       // Store all decoded sequences
+
+      // Set all but the first element of the output tensor to 0.
+      const int N = inputs_t.size();
+      for (int i = 0; i < N; i++) {
+        outputs_c_t(i) = 0;
+        outputs_u_t(i) = 0;
+      }
+
+      // Set first output value to 1 / 2 if possible.
+      if (N > 0) outputs_c_t(0) = beam_width_;
+      if (N > 0) outputs_u_t(0) = beam_width_;
+
     }
 
     Status ValidateInputsGenerateOutputs(OpKernelContext *ctx,
