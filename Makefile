@@ -4,7 +4,7 @@ PYTHON_BIN_PATH = python
 
 ZERO_OUT_SRCS = $(wildcard tensorflow_zero_out/cc/kernels/*.cc) $(wildcard tensorflow_zero_out/cc/ops/*.cc)
 TIME_TWO_SRCS = tensorflow_time_two/cc/kernels/time_two_kernels.cc $(wildcard tensorflow_time_two/cc/kernels/*.h) $(wildcard tensorflow_time_two/cc/ops/*.cc)
-CTC_BEAM_SEARCH_SRCS = $(wildcard tensorflow_ctc_beam_search_uncoll/cc/kernels/*.cc) $(wildcard tensorflow_ctc_beam_search_uncoll/cc/kernels/*.h) $(wildcard tensorflow_ctc_beam_search_uncoll/cc/ops/*.cc)
+CTC_BEAM_SEARCH_SRCS = $(wildcard tensorflow_ctc_beam_search_u_decoder/cc/kernels/*.cc) $(wildcard tensorflow_ctc_beam_search_u_decoder/cc/kernels/*.h) $(wildcard tensorflow_ctc_beam_search_u_decoder/cc/ops/*.cc)
 
 TF_CFLAGS := $(shell $(PYTHON_BIN_PATH) -c 'import tensorflow as tf; print(" ".join(tf.sysconfig.get_compile_flags()))')
 TF_LFLAGS := $(shell $(PYTHON_BIN_PATH) -c 'import tensorflow as tf; print(" ".join(tf.sysconfig.get_link_flags()))')
@@ -13,7 +13,7 @@ CFLAGS = ${TF_CFLAGS} -fPIC -O2 -std=c++11
 LDFLAGS = -shared ${TF_LFLAGS}
 
 ZERO_OUT_TARGET_LIB = tensorflow_zero_out/python/ops/_zero_out_ops.so
-CTC_BEAM_SEARCH_TARGET_LIB = tensorflow_ctc_beam_search_uncoll/python/ops/_ctc_beam_search_uncoll_ops.so
+CTC_BEAM_SEARCH_TARGET_LIB = tensorflow_ctc_beam_search_u_decoder/python/ops/_ctc_beam_search_u_decoder_ops.so
 TIME_TWO_GPU_ONLY_TARGET_LIB = tensorflow_time_two/python/ops/_time_two_ops.cu.o
 TIME_TWO_TARGET_LIB = tensorflow_time_two/python/ops/_time_two_ops.so
 
@@ -42,16 +42,16 @@ $(TIME_TWO_TARGET_LIB): $(TIME_TWO_SRCS) $(TIME_TWO_GPU_ONLY_TARGET_LIB)
 time_two_test: tensorflow_time_two/python/ops/time_two_ops_test.py tensorflow_time_two/python/ops/time_two_ops.py $(TIME_TWO_TARGET_LIB)
 	$(PYTHON_BIN_PATH) tensorflow_time_two/python/ops/time_two_ops_test.py
 
-# ctc_beam_search_uncoll op for CPU
-ctc_beam_search_uncoll_op: $(CTC_BEAM_SEARCH_TARGET_LIB)
+# ctc_beam_search_u_decoder op for CPU
+ctc_beam_search_u_decoder_op: $(CTC_BEAM_SEARCH_TARGET_LIB)
 
 $(CTC_BEAM_SEARCH_TARGET_LIB): $(CTC_BEAM_SEARCH_SRCS)
 	$(CXX) $(CFLAGS) -o $@ $^ ${LDFLAGS}
 
-ctc_beam_search_uncoll_test: tensorflow_ctc_beam_search_uncoll/python/ops/ctc_beam_search_uncoll_ops_test.py tensorflow_ctc_beam_search_uncoll/python/ops/ctc_beam_search_uncoll_ops.py $(CTC_BEAM_SEARCH_TARGET_LIB)
-	$(PYTHON_BIN_PATH) tensorflow_ctc_beam_search_uncoll/python/ops/ctc_beam_search_uncoll_ops_test.py
+ctc_beam_search_u_decoder_test: tensorflow_ctc_beam_search_u_decoder/python/ops/ctc_beam_search_u_decoder_ops_test.py tensorflow_ctc_beam_search_u_decoder/python/ops/ctc_beam_search_u_decoder_ops.py $(CTC_BEAM_SEARCH_TARGET_LIB)
+	$(PYTHON_BIN_PATH) tensorflow_ctc_beam_search_u_decoder/python/ops/ctc_beam_search_u_decoder_ops_test.py
 
-ctc_beam_search_uncoll_pip_pkg: $(CTC_BEAM_SEARCH_TARGET_LIB)
+ctc_beam_search_u_decoder_pip_pkg: $(CTC_BEAM_SEARCH_TARGET_LIB)
 	./build_pip_pkg.sh make artifacts
 
 clean:

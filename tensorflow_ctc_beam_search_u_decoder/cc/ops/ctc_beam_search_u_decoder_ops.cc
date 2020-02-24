@@ -6,7 +6,7 @@ using namespace tensorflow;
 // TODO Add shape assertions like
 // https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/ops/ctc_ops.cc
 
-REGISTER_OP("CTCBeamSearchUncoll")
+REGISTER_OP("CTCBeamSearchUDecoder")
     .Input("inputs: T")
     .Input("sequence_length: int32")
     .Attr("beam_width: int >= 1")

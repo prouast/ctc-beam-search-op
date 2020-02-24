@@ -2,8 +2,6 @@
 
 #include <limits>
 
-//#include "third_party/eigen3/Eigen/Core"
-
 //#include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 //#include "tensorflow/core/framework/register_types.h"
@@ -17,9 +15,9 @@
 namespace tensorflow {
 
 template <typename T>
-class CTCBeamSearchUncollOp : public OpKernel {
+class CTCBeamSearchUDecoderOp : public OpKernel {
   public:
-    explicit CTCBeamSearchUncollOp(OpKernelConstruction *ctx) : OpKernel(ctx) {
+    explicit CTCBeamSearchUDecoderOp(OpKernelConstruction *ctx) : OpKernel(ctx) {
       OP_REQUIRES_OK(ctx, ctx->GetAttr("beam_width", &beam_width_));
       OP_REQUIRES_OK(ctx, ctx->GetAttr("blank", &blank_));
       OP_REQUIRES_OK(ctx, ctx->GetAttr("def_val", &def_val_));
@@ -166,13 +164,13 @@ class CTCBeamSearchUncollOp : public OpKernel {
     int beam_width_;
     int blank_;
     int def_val_;
-    TF_DISALLOW_COPY_AND_ASSIGN(CTCBeamSearchUncollOp);
+    TF_DISALLOW_COPY_AND_ASSIGN(CTCBeamSearchUDecoderOp);
 };
 
 #define REGISTER_CPU(T)                                                       \
 REGISTER_KERNEL_BUILDER(                                                      \
-      Name("CTCBeamSearchUncoll").Device(DEVICE_CPU).TypeConstraint<T>("T"),  \
-      CTCBeamSearchUncollOp<T>);
+      Name("CTCBeamSearchUDecoder").Device(DEVICE_CPU).TypeConstraint<T>("T"),  \
+      CTCBeamSearchUDecoderOp<T>);
 
 REGISTER_CPU(float);
 REGISTER_CPU(double);

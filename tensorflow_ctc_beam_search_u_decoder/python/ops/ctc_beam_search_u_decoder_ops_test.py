@@ -1,4 +1,4 @@
-"""Tests for ctc_beam_search_uncoll ops."""
+"""Tests for ctc_beam_search_u_decoder ops."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -8,14 +8,14 @@ import numpy as np
 
 from tensorflow.python.platform import test
 try:
-    from tensorflow_ctc_beam_search_uncoll.python.ops.ctc_beam_search_uncoll_ops import ctc_beam_search_uncoll
+    from tensorflow_ctc_beam_search_u_decoder.python.ops.ctc_beam_search_u_decoder_ops import ctc_beam_search_u_decoder
 except ImportError:
-    from ctc_beam_search_uncoll_ops import ctc_beam_search_uncoll
+    from ctc_beam_search_u_decoder_ops import ctc_beam_search_u_decoder
 
 
-class CTCBeamSearchUncollTest(test.TestCase):
+class CTCBeamSearchUDecoderTest(test.TestCase):
 
-    def testCTCBeamSearchUncoll(self):
+    def testCTCBeamSearchUDecoder(self):
 
         # Inputs have shape [max_time, batch_size, num_classes]
         # here: [2, 1, 2]
@@ -24,11 +24,11 @@ class CTCBeamSearchUncollTest(test.TestCase):
 
         with self.test_session():
             self.assertAllClose(
-                a=ctc_beam_search_uncoll(inputs=test_inputs,
+                a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[2], beam_width=5)[0],
                 b=np.array([[[5, 0]], [[0, 0]]]))
             self.assertAllClose(
-                a=ctc_beam_search_uncoll(inputs=test_inputs,
+                a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[2], beam_width=2)[1],
                 b=np.array([[[2, 0]], [[0, 0]]]))
 
