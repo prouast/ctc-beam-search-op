@@ -3,16 +3,18 @@
 
 using namespace tensorflow;
 
-// TODO Add shape assertions
+// TODO Add shape assertions like
+// https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/ops/ctc_ops.cc
 
 REGISTER_OP("CTCBeamSearchUncoll")
-    .Input("inputs: float")
+    .Input("inputs: T")
     .Input("sequence_length: int32")
-    .Attr("beam_width: int")
-    .Attr("blank: int=0")
-    .Attr("def_val: int=0")
+    .Attr("beam_width: int >= 1")
+    .Attr("blank: int = 0")
+    .Attr("def_val: int = 0")
     .Output("decoded_c: int32")
     .Output("decoded_u: int32")
+    .Attr("T: {float, double} = DT_FLOAT")
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
       c->set_output(0, c->input(0));
       c->set_output(1, c->input(0));

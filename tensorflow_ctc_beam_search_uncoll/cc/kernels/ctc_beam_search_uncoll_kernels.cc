@@ -1,19 +1,22 @@
-//#define EIGEN_USE_THREADS
+#define EIGEN_USE_THREADS
 
-//#include <limits>
-#include <cstdint>
+#include <limits>
 
-//#include "tensorflow/core/util/ctc/ctc_beam_search.h"
+//#include "third_party/eigen3/Eigen/Core"
+
 //#include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
+//#include "tensorflow/core/framework/register_types.h"
 //#include "tensorflow/core/framework/types.h"
 //#include "tensorflow/core/lib/core/status.h"
 //#include "tensorflow/core/platform/logging.h"
 //#include "tensorflow/core/platform/macros.h"
 //#include "tensorflow/core/util/sparse/sparse_tensor.h"
+//#include "tensorflow/core/util/work_sharder.h"
 
-using namespace tensorflow;
+namespace tensorflow {
 
+template <typename T>
 class CTCBeamSearchUncollOp : public OpKernel {
   public:
     explicit CTCBeamSearchUncollOp(OpKernelConstruction *ctx) : OpKernel(ctx) {
@@ -38,11 +41,11 @@ class CTCBeamSearchUncollOp : public OpKernel {
       //  &log_prob, &decoded_indices, &decoded_values, &decoded_shape));
 
       // Save variables as specific types
-      auto inputs_t = inputs->tensor<float, 3>();
+      auto inputs_t = inputs->tensor<T, 3>();
       auto seq_len_t = seq_len->vec<int32>();
       auto outputs_c_t = outputs_c->flat<int32>();
       auto outputs_u_t = outputs_u->flat<int32>();
-      //auto log_prob_t = log_prob->matrix<float>();
+      //auto log_prob_t = log_prob->matrix<T>();
       //log_prob_t.setZero();
 
       // Save shape of inputs and specific input dimensions
@@ -52,25 +55,35 @@ class CTCBeamSearchUncollOp : public OpKernel {
       const int64 num_classes = inputs_shape.dim_size(2);
 
       // For every time step, copy elements into input_list_t
-      std::vector<TTypes<float>::UnalignedConstMatrix> input_list_t;
+      std::vector<typename TTypes<T>::UnalignedConstMatrix> input_list_t;
       for (std::size_t t = 0; t < max_time; ++t) {
         input_list_t.emplace_back(inputs_t.data() + t * batch_size * num_classes,
                                   batch_size, num_classes);
       }
 
-      
-      // ...
+      Tensor input_chip(DataTypeToEnum<T>::v(), TensorShape({num_classes}));
+      auto input_chip_t = input_chip.flat<T>();
+
+      std::vector<std::vector<std::vector<int> > > best_paths(batch_size);
+      std::vector<T> log_probs;
+
       // Iterate over all batch elements
-      //for (int b = 0; b < batch_size; ++b) {
-      //  // ...
-      //  // Iterate over all time steps
-      //  for (int t = 0; t < seq_len_t(b); ++t) {
-      //    // beam search step
-      //  }
-      //  // Get top paths
-      //  // Get top uncollapsed paths
-      //  // beam search Reset
-      //}
+      for (int b = 0; b < batch_size; ++b) {
+        auto& best_paths_b = best_paths[b];
+        // best_paths_b.resize(decode_helper_.GetTopPaths());
+        // Iterate over all time steps
+        for (int t = 0; t < seq_len_t(b); ++t) {
+          input_chip_t = input_list_t[t].chip(b, 0);
+          auto input_bi = Eigen::Map<const Eigen::Array<T, Eigen::Dynamic, 1>>(
+            input_chip_t.data(), num_classes);
+          std::cout << "b=" << b << " t=" << t << std::endl;
+          std::cout << input_bi << std::endl;
+          // beam search step
+        }
+        // Get top paths
+        // Get top uncollapsed paths
+        // beam search Reset
+      }
       // Store all decoded sequences
 
       // Set all but the first element of the output tensor to 0.
@@ -156,5 +169,14 @@ class CTCBeamSearchUncollOp : public OpKernel {
     TF_DISALLOW_COPY_AND_ASSIGN(CTCBeamSearchUncollOp);
 };
 
-REGISTER_KERNEL_BUILDER(Name("CTCBeamSearchUncoll").Device(DEVICE_CPU),
-  CTCBeamSearchUncollOp);
+#define REGISTER_CPU(T)                                                       \
+REGISTER_KERNEL_BUILDER(                                                      \
+      Name("CTCBeamSearchUncoll").Device(DEVICE_CPU).TypeConstraint<T>("T"),  \
+      CTCBeamSearchUncollOp<T>);
+
+REGISTER_CPU(float);
+REGISTER_CPU(double);
+
+#undef REGISTER_CPU
+
+}  // end namespace tensorflow
