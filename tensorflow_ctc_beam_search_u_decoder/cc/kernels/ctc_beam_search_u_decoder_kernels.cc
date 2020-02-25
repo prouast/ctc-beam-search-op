@@ -2,7 +2,7 @@
 
 #include <limits>
 
-#include "ctc_beam_search_u_decoder.h"
+#include "../util/ctc_beam_search_u_decoder.h"
 
 //#include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
