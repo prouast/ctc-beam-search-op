@@ -2,6 +2,8 @@
 
 #include <limits>
 
+#include "ctc_beam_search_u_decoder.h"
+
 //#include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 //#include "tensorflow/core/framework/register_types.h"
@@ -18,8 +20,9 @@ template <typename T>
 class CTCBeamSearchUDecoderOp : public OpKernel {
   public:
     explicit CTCBeamSearchUDecoderOp(OpKernelConstruction *ctx) : OpKernel(ctx) {
+      OP_REQUIRES_OK(ctx, ctx->GetAttr("merge_repeated", &merge_repeated_));
       OP_REQUIRES_OK(ctx, ctx->GetAttr("beam_width", &beam_width_));
-      OP_REQUIRES_OK(ctx, ctx->GetAttr("blank", &blank_));
+      OP_REQUIRES_OK(ctx, ctx->GetAttr("blank_index", &blank_index_));
       OP_REQUIRES_OK(ctx, ctx->GetAttr("def_val", &def_val_));
     }
 
@@ -58,6 +61,10 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
         input_list_t.emplace_back(inputs_t.data() + t * batch_size * num_classes,
                                   batch_size, num_classes);
       }
+
+      ctc::CTCBeamSearchUDecoder<T> decoder(num_classes, blank_index_,
+                                            beam_width_, &beam_scorer_, 1,
+                                            merge_repeated_);
 
       Tensor input_chip(DataTypeToEnum<T>::v(), TensorShape({num_classes}));
       auto input_chip_t = input_chip.flat<T>();
@@ -161,8 +168,10 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
     }
 
   private:
+    typename ctc::CTCBeamSearchDecoder<T>::DefaultBeamScorer beam_scorer_;
+    bool merge_repeated_;
     int beam_width_;
-    int blank_;
+    int blank_index_;
     int def_val_;
     TF_DISALLOW_COPY_AND_ASSIGN(CTCBeamSearchUDecoderOp);
 };
