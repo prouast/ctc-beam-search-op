@@ -1,5 +1,7 @@
+//
 
 #include "third_party/eigen3/Eigen/Core"
+#include "tensorflow/core/lib/core/status.h"
 
 namespace tensorflow {
 namespace ctc {
@@ -12,15 +14,11 @@ class CTCUDecoder {
     typedef std::vector<std::vector<int>> Output;
     typedef Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>> ScoreOutput;
 
-    CTCDecoder(int num_classes, int blank_index, int batch_size, bool merge_repeated)
+    CTCUDecoder(int num_classes, int blank_index, int batch_size, bool merge_repeated)
       : num_classes_(num_classes), blank_index_(blank_index),
         batch_size_(batch_size), merge_repeated_(merge_repeated) {}
 
-    virtual ~CTCDecoder() {}
-
-    virtual Status Decode(const SequenceLength& seq_len,
-                        const std::vector<Input>& input,
-                        std::vector<Output>* output, ScoreOutput* scores) = 0;
+    virtual ~CTCUDecoder() {}
 
     int batch_size() { return batch_size_; }
     int num_classes() { return num_classes_; }

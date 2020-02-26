@@ -13,6 +13,8 @@ limitations under the License.
 #include <algorithm>
 #include <memory>
 #include <vector>
+#include <iostream>
+#include <sstream>
 
 #include "ctc_loss_util.h"
 
@@ -77,11 +79,30 @@ struct BeamEntry {
     return labels;
   }
 
+  void Print() {
+    std::vector<int> label_seq = LabelSeq(false);
+    std::stringstream ss;
+    for (size_t i = 0; i < label_seq.size(); ++i) {
+      if (i != 0)
+        ss << ",";
+      ss << label_seq[i];
+    }
+    std::string s = ss.str();
+    std::cout << "[label=" << s << "; " << "p_blank=" << oldp.blank << "; " << "p_label=" << oldp.label << "]" << std::endl;
+  }
+
   // TODO add support for saving uncollapsed beam labels and candidates with
   //      probabilities
+  //  -> Can I store information on how many blanks are attached after label
+  //     in both cases blank and non_blank?
 
   BeamEntry<T, CTCBeamState>* parent;
   int label;
+
+  // TODO assign these, what about sorting, what about candidates?
+  //std::vector<int> uncoll_labels_blank;
+  //std::vector<int> uncoll_labels_nblank;
+
   // All instances of child BeamEntry are owned by *beam_root.
   gtl::FlatMap<int, BeamEntry<T, CTCBeamState>*> children;
   BeamProbability<T> oldp;

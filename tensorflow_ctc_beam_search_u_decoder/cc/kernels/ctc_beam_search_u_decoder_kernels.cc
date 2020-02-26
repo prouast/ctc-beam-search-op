@@ -75,7 +75,7 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
       // Iterate over all batch elements
       for (int b = 0; b < batch_size; ++b) {
         auto& best_paths_b = best_paths[b];
-        // best_paths_b.resize(decode_helper_.GetTopPaths());
+        best_paths_b.resize(GetTopPaths());
         // Iterate over all time steps
         for (int t = 0; t < seq_len_t(b); ++t) {
           input_chip_t = input_list_t[t].chip(b, 0);
@@ -84,6 +84,8 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
           std::cout << "b=" << b << " t=" << t << std::endl;
           std::cout << input_bi << std::endl;
           // beam search step
+          // TODO understand why test result is not as expected
+          decoder.Step(input_bi);
         }
         // Get top paths
         // Get top uncollapsed paths
@@ -167,12 +169,16 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
       return Status::OK();
     }
 
+    inline int GetTopPaths() const { return top_paths_; }
+    void SetTopPaths(int tp) { top_paths_ = tp; }
+
   private:
-    typename ctc::CTCBeamSearchDecoder<T>::DefaultBeamScorer beam_scorer_;
+    typename ctc::CTCBeamSearchUDecoder<T>::DefaultBeamScorer beam_scorer_;
     bool merge_repeated_;
     int beam_width_;
     int blank_index_;
     int def_val_;
+    int top_paths_;
     TF_DISALLOW_COPY_AND_ASSIGN(CTCBeamSearchUDecoderOp);
 };
 
