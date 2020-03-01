@@ -82,9 +82,6 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
   // Final normalization offset to get correct log probabilities.
   T norm_offset = max_coeff + logsumexp;
 
-  // TODO do i need this without label selection?
-  const T label_selection_input_min = -std::numeric_limits<T>::infinity();
-
   // Extract the beams sorted in decreasing new probability
   CHECK_EQ(this->num_classes_, raw_input.size());
   std::unique_ptr<std::vector<BeamEntry*>> branches(leaves_.Extract());
@@ -121,9 +118,6 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
     b->newp.total = LogSumExp(b->newp.blank, b->newp.label);
     // Push the entry back to the top paths list.
     // Note, this will always fill leaves back up in sorted order.
-    std::cout << "A_New:" << std::endl;
-    b->Print();
-    leaves_.push(b);
   }
 
   // B. Extend BeamEntries with a non-blank event
@@ -180,12 +174,6 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
         }
       }
     }
-  }
-
-  // Print all current branches
-  std::unique_ptr<std::vector<BeamEntry*>> branches1(leaves_.Extract());
-  for (BeamEntry* b : *branches1) {
-    b->Print();
   }
 }
 

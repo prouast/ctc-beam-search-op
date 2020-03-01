@@ -81,7 +81,7 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
           input_chip_t = input_list_t[t].chip(b, 0);
           auto input_bi = Eigen::Map<const Eigen::Array<T, Eigen::Dynamic, 1>>(
             input_chip_t.data(), num_classes);
-          std::cout << "b=" << b << " t=" << t << std::endl;
+          std::cout << "------------ b=" << b << " t=" << t << " ------------" << std::endl;
           std::cout << input_bi << std::endl;
           // beam search step
           // TODO understand why test result is not as expected

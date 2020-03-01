@@ -79,7 +79,7 @@ struct BeamEntry {
     return labels;
   }
 
-  void Print() {
+  void PrintNew() {
     std::vector<int> label_seq = LabelSeq(false);
     std::stringstream ss;
     for (size_t i = 0; i < label_seq.size(); ++i) {
@@ -88,7 +88,19 @@ struct BeamEntry {
       ss << label_seq[i];
     }
     std::string s = ss.str();
-    std::cout << "[label=" << s << "; " << "p_blank=" << oldp.blank << "; " << "p_label=" << oldp.label << "]" << std::endl;
+    std::cout << "[label=" << s << "; " << "p_blank=" << newp.blank << "; " << "p_label=" << newp.label << "; " << "p_total=" << newp.total << "]" << std::endl;
+  }
+
+  void PrintOld() {
+    std::vector<int> label_seq = LabelSeq(false);
+    std::stringstream ss;
+    for (size_t i = 0; i < label_seq.size(); ++i) {
+      if (i != 0)
+        ss << ",";
+      ss << label_seq[i];
+    }
+    std::string s = ss.str();
+    std::cout << "[label=" << s << "; " << "p_blank=" << oldp.blank << "; " << "p_label=" << oldp.label << "; " << "p_total=" << oldp.total << "]" << std::endl;
   }
 
   // TODO add support for saving uncollapsed beam labels and candidates with
