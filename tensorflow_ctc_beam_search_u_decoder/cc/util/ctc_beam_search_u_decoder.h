@@ -118,6 +118,9 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
     b->newp.total = LogSumExp(b->newp.blank, b->newp.label);
     // Push the entry back to the top paths list.
     // Note, this will always fill leaves back up in sorted order.
+    //std::cout << "NewA:" << std::endl;
+    //b->PrintNew();
+    leaves_.push(b);
   }
 
   // B. Extend BeamEntries with a non-blank event
@@ -166,6 +169,8 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
             BeamEntry* bottom = leaves_.peek_bottom();
             bottom->newp.Reset();
           }
+          //std::cout << "NewB:" << std::endl;
+          //(&c)->PrintNew();
           leaves_.push(&c);
         } else {
           // Deactivate child.

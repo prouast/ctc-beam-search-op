@@ -10,12 +10,13 @@ REGISTER_OP("CTCBeamSearchUDecoder")
     .Input("inputs: T")
     .Input("sequence_length: int32")
     .Attr("beam_width: int >= 1")
-    .Attr("merge_repeated: bool = true")
-    .Attr("blank_index: int = 0")
     .Attr("top_paths: int >= 1")
-    .Attr("def_val: int = 0") // TODO do we need def_val?
-    .Output("decoded_c: int32")
-    .Output("decoded_u: int32")
+    .Attr("merge_repeated: bool = False")
+    .Attr("blank_index: int = 0")
+    .Output("decoded_indices: top_paths * int64")
+    .Output("decoded_values: top_paths * int64")
+    .Output("decoded_shape: top_paths * int64")
+    .Output("log_probability: T")
     .Attr("T: {float, double} = DT_FLOAT")
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
       c->set_output(0, c->input(0));
