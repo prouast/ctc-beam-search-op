@@ -75,8 +75,8 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
           input_chip_t = input_list_t[t].chip(b, 0);
           auto input_bi = Eigen::Map<const Eigen::Array<T, Eigen::Dynamic, 1>>(
             input_chip_t.data(), num_classes);
-          //std::cout << "------------ b=" << b << " t=" << t << " ------------" << std::endl;
-          //std::cout << input_bi << std::endl;
+          std::cout << "------------ b=" << b << " t=" << t << " ------------" << std::endl;
+          std::cout << input_bi << std::endl;
           // beam search step
           decoder.Step(input_bi);
         }
@@ -85,6 +85,18 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
           ctx, decoder.TopPaths(top_paths_, &best_paths_b,
                                 &log_probs, merge_repeated_));
 
+        std::cout << "best_paths_b" << std::endl;
+        for (int i = 0; i < top_paths_; ++i) {
+          std::vector<int> label_seq = best_paths_b[i];
+          std::stringstream ss;
+          for (size_t i = 0; i < label_seq.size(); ++i) {
+            if (i != 0)
+              ss << ",";
+            ss << label_seq[i];
+          }
+          std::cout << ss.str() << std::endl;
+          std::cout << log_probs[i] << std::endl;
+        }
         // Get top uncollapsed paths
         // TODO
         // beam search Reset

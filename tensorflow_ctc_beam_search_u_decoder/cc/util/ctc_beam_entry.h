@@ -44,6 +44,25 @@ struct BeamProbability {
   T label;
 };
 
+template <typename T>
+struct BeamUncollCandidate {
+  BeamUncollCandidate() : prob(kLogZero<T>()) {}
+  BeamUncollCandidate(std::vector<int> l, T p) : prob(p), label_seq(l) {}
+  T prob;
+  std::vector<int> label_seq;
+  std::string Print() {
+    std::stringstream ss;
+    ss << "[" << prob << ": [";
+    for (size_t i = 0; i < label_seq.size(); ++i) {
+      if (i != 0)
+        ss << ",";
+      ss << label_seq[i];
+    }
+    ss << "]]";
+    return ss.str();
+  }
+};
+
 template <class T, class CTCBeamState>
 class BeamRoot;
 
@@ -79,41 +98,69 @@ struct BeamEntry {
     return labels;
   }
 
-  void PrintNew() {
-    std::vector<int> label_seq = LabelSeq(false);
-    std::stringstream ss;
-    for (size_t i = 0; i < label_seq.size(); ++i) {
-      if (i != 0)
-        ss << ",";
-      ss << label_seq[i];
-    }
-    std::string s = ss.str();
-    std::cout << "[label=" << s << "; " << "p_blank=" << newp.blank << "; " << "p_label=" << newp.label << "; " << "p_total=" << newp.total << "]" << std::endl;
-  }
-
-  void PrintOld() {
-    std::vector<int> label_seq = LabelSeq(false);
-    std::stringstream ss;
-    for (size_t i = 0; i < label_seq.size(); ++i) {
-      if (i != 0)
-        ss << ",";
-      ss << label_seq[i];
-    }
-    std::string s = ss.str();
-    std::cout << "[label=" << s << "; " << "p_blank=" << oldp.blank << "; " << "p_label=" << oldp.label << "; " << "p_total=" << oldp.total << "]" << std::endl;
-  }
-
-  // TODO add support for saving uncollapsed beam labels and candidates with
-  //      probabilities
-  //  -> Can I store information on how many blanks are attached after label
-  //     in both cases blank and non_blank?
-
   BeamEntry<T, CTCBeamState>* parent;
   int label;
 
-  // TODO assign these, what about sorting, what about candidates?
-  //std::vector<int> uncoll_labels_blank;
-  //std::vector<int> uncoll_labels_nblank;
+  // Must be sorted at end of step
+  BeamUncollCandidate<T>* uncoll_blank = nullptr;
+  BeamUncollCandidate<T>* uncoll_nblank = nullptr;
+  std::vector<BeamUncollCandidate<T>> uncoll_cand_blank;
+  std::vector<BeamUncollCandidate<T>> uncoll_cand_nblank;
+  void AddUncollCandidate(bool from_blank, bool to_blank, int l, T p) {
+    // Get old BeamUncollCandidate from this BeamEntry if exists,
+    //  otherwise from parent BeamEntry or create new
+    BeamUncollCandidate<T>* old_uncoll = from_blank ? uncoll_blank : uncoll_nblank;
+    if (!old_uncoll) {
+      old_uncoll = from_blank ? parent->uncoll_blank : parent->uncoll_nblank;
+      if (old_uncoll) {
+        old_uncoll = parent->uncoll_blank;
+      } else {
+        BeamUncollCandidate<T>* new_uncoll = new BeamUncollCandidate<T>();
+        old_uncoll = new_uncoll;
+      }
+    }
+    // Concat with previous uncoll label
+    std::vector<int> new_label_seq(old_uncoll->label_seq);
+    new_label_seq.push_back(l);
+    // New probability by adding to parent uncoll
+    T new_p_blank = old_uncoll->prob + p;
+    // Add new BeamUncollCandidate
+    if (to_blank) {
+      uncoll_cand_blank.push_back(BeamUncollCandidate<T>(new_label_seq, new_p_blank));
+    } else {
+      uncoll_cand_nblank.push_back(BeamUncollCandidate<T>(new_label_seq, new_p_blank));
+    }
+  }
+
+  void Print(bool new_, bool full) {
+    std::vector<int> label_seq = LabelSeq(false);
+    std::stringstream ss;
+    for (size_t i = 0; i < label_seq.size(); ++i) {
+      if (i != 0)
+        ss << ",";
+      ss << label_seq[i];
+    }
+    std::string s = ss.str();
+    if (full) {
+      std::cout << "====================" << std::endl;
+    }
+    if (new_) {
+      std::cout << "[label=" << s << "; " << "p_blank=" << newp.blank << "; " << "p_label=" << newp.label << "; " << "p_total=" << newp.total << "]" << std::endl;
+    } else {
+      std::cout << "[label=" << s << "; " << "p_blank=" << oldp.blank << "; " << "p_label=" << oldp.label << "; " << "p_total=" << oldp.total << "]" << std::endl;
+    }
+    if (full) {
+      std::cout << "------- blank ------" << std::endl;
+      for (BeamUncollCandidate<T> buc: uncoll_cand_blank) {
+        std::cout << buc.Print() << std::endl;
+      }
+      std::cout << "------- nblank ------" << std::endl;
+      for (BeamUncollCandidate<T> buc: uncoll_cand_nblank) {
+        std::cout << buc.Print() << std::endl;
+      }
+      std::cout << "====================" << std::endl;
+    }
+  }
 
   // All instances of child BeamEntry are owned by *beam_root.
   gtl::FlatMap<int, BeamEntry<T, CTCBeamState>*> children;
