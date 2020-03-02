@@ -12,6 +12,7 @@ REGISTER_OP("CTCBeamSearchUDecoder")
     .Attr("beam_width: int >= 1")
     .Attr("merge_repeated: bool = true")
     .Attr("blank_index: int = 0")
+    .Attr("top_paths: int >= 1")
     .Attr("def_val: int = 0") // TODO do we need def_val?
     .Output("decoded_c: int32")
     .Output("decoded_u: int32")
