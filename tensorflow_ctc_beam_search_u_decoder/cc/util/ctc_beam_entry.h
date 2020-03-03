@@ -46,10 +46,14 @@ struct BeamProbability {
 
 template <typename T>
 struct BeamUncollCandidate {
-  BeamUncollCandidate() : prob(kLogZero<T>()) {}
+  BeamUncollCandidate() : prob(kLogZero<T>()), active(false) {}
+  BeamUncollCandidate(T p) : prob(p), active(false) {}
   BeamUncollCandidate(std::vector<int> l, T p) : prob(p), label_seq(l) {}
   T prob;
   std::vector<int> label_seq;
+  BeamUncollCandidate<T>* clone() const {
+    return new BeamUncollCandidate<T>(*this);
+  }
   std::string Print() {
     std::stringstream ss;
     ss << "[" << prob << ": [";
@@ -101,34 +105,54 @@ struct BeamEntry {
   BeamEntry<T, CTCBeamState>* parent;
   int label;
 
-  // Must be sorted at end of step
   BeamUncollCandidate<T>* uncoll_blank = nullptr;
   BeamUncollCandidate<T>* uncoll_nblank = nullptr;
-  std::vector<BeamUncollCandidate<T>> uncoll_cand_blank;
-  std::vector<BeamUncollCandidate<T>> uncoll_cand_nblank;
-  void AddUncollCandidate(bool from_blank, bool to_blank, int l, T p) {
-    // Get old BeamUncollCandidate from this BeamEntry if exists,
-    //  otherwise from parent BeamEntry or create new
-    BeamUncollCandidate<T>* old_uncoll = from_blank ? uncoll_blank : uncoll_nblank;
-    if (!old_uncoll) {
-      old_uncoll = from_blank ? parent->uncoll_blank : parent->uncoll_nblank;
-      if (old_uncoll) {
-        old_uncoll = parent->uncoll_blank;
-      } else {
-        BeamUncollCandidate<T>* new_uncoll = new BeamUncollCandidate<T>();
-        old_uncoll = new_uncoll;
-      }
-    }
+  std::vector<BeamUncollCandidate<T>*> uncoll_cand_blank;
+  std::vector<BeamUncollCandidate<T>*> uncoll_cand_nblank;
+  void AddUncollCandidate(BeamUncollCandidate<T>* old_uncoll,
+    bool from_blank, bool to_blank, int l, T p) {
+    // README: Didn't finish here yesterday. I am not sure what is the best way
+    //   to track the status if uncoll_blank and uncoll_nblank. Maybe somehting
+    //   with bool active?
+    // Previous label sequence
+    std::vector<int> old_label_seq = old_uncoll->label_seq;
+    // Previous probability
+    T old_prob = old_uncoll->prob;
     // Concat with previous uncoll label
-    std::vector<int> new_label_seq(old_uncoll->label_seq);
+    std::vector<int> new_label_seq(old_label_seq);
     new_label_seq.push_back(l);
     // New probability by adding to parent uncoll
-    T new_p_blank = old_uncoll->prob + p;
+    T new_prob = old_prob + p;
+    // New BeamUncollCandidate
+    BeamUncollCandidate<T>* new_uncoll = new BeamUncollCandidate<T>(
+      new_label_seq, new_prob);
     // Add new BeamUncollCandidate
     if (to_blank) {
-      uncoll_cand_blank.push_back(BeamUncollCandidate<T>(new_label_seq, new_p_blank));
+      uncoll_cand_blank.push_back(new_uncoll);
     } else {
-      uncoll_cand_nblank.push_back(BeamUncollCandidate<T>(new_label_seq, new_p_blank));
+      uncoll_cand_nblank.push_back(new_uncoll);
+    }
+  }
+  void ResolveUncoll() {
+    if (uncoll_cand_blank.size() > 0) {
+      std::sort(uncoll_cand_blank.begin(), uncoll_cand_blank.end(),
+        [](BeamUncollCandidate<T>* a, BeamUncollCandidate<T>* b) {
+          return a->prob > b->prob; });
+      uncoll_blank = uncoll_cand_blank[0];
+      for (int i = 1; i < uncoll_cand_blank.size(); ++i) {
+        delete uncoll_cand_blank[i];
+      }
+      uncoll_cand_blank.clear();
+    }
+    if (uncoll_cand_nblank.size() > 0) {
+      std::sort(uncoll_cand_nblank.begin(), uncoll_cand_nblank.end(),
+        [](BeamUncollCandidate<T>* a, BeamUncollCandidate<T>* b) {
+          return a->prob > b->prob; });
+      uncoll_nblank = uncoll_cand_nblank[0];
+      for (int i = 1; i < uncoll_cand_nblank.size(); ++i) {
+        delete uncoll_cand_nblank[i];
+      }
+      uncoll_cand_nblank.clear();
     }
   }
 
@@ -151,12 +175,26 @@ struct BeamEntry {
     }
     if (full) {
       std::cout << "------- blank ------" << std::endl;
-      for (BeamUncollCandidate<T> buc: uncoll_cand_blank) {
-        std::cout << buc.Print() << std::endl;
+      if (uncoll_blank != nullptr) {
+        std::cout << "(resolved)" << std::endl;
+        std::cout << uncoll_blank->Print() << std::endl;
+      }
+      if (uncoll_cand_blank.size() > 0) {
+        std::cout << "(candidates)" << std::endl;
+        for (BeamUncollCandidate<T>* buc: uncoll_cand_blank) {
+          std::cout << buc->Print() << std::endl;
+        }
       }
       std::cout << "------- nblank ------" << std::endl;
-      for (BeamUncollCandidate<T> buc: uncoll_cand_nblank) {
-        std::cout << buc.Print() << std::endl;
+      if (uncoll_nblank != nullptr) {
+        std::cout << "(resolved)" << std::endl;
+        std::cout << uncoll_nblank->Print() << std::endl;
+      }
+      if (uncoll_cand_nblank.size() > 0) {
+        std::cout << "(candidates)" << std::endl;
+        for (BeamUncollCandidate<T>* buc: uncoll_cand_nblank) {
+          std::cout << buc->Print() << std::endl;
+        }
       }
       std::cout << "====================" << std::endl;
     }
@@ -174,8 +212,10 @@ struct BeamEntry {
   // otherwise parent will become invalid.
   // This private constructor is only called through the factory method
   // BeamRoot<CTCBeamState>::AddEntry().
-  BeamEntry(BeamEntry* p, int l, BeamRoot<T, CTCBeamState>* beam_root)
-      : parent(p), label(l), beam_root(beam_root) {}
+  BeamEntry(BeamEntry* p, int l, BeamRoot<T, CTCBeamState>* beam_root,
+            BeamUncollCandidate<T>* buc_b, BeamUncollCandidate<T>* buc_nb)
+      : parent(p), label(l), beam_root(beam_root),
+        uncoll_blank(buc_b), uncoll_nblank(buc_nb) {}
   BeamRoot<T, CTCBeamState>* beam_root;
   TF_DISALLOW_COPY_AND_ASSIGN(BeamEntry);
 };
@@ -192,7 +232,19 @@ class BeamRoot {
   BeamRoot& operator=(const BeamRoot&) = delete;
 
   BeamEntry<T, CTCBeamState>* AddEntry(BeamEntry<T, CTCBeamState>* p, int l) {
-    auto* new_entry = new BeamEntry<T, CTCBeamState>(p, l, this);
+    BeamUncollCandidate<T>* buc_b = nullptr;
+    BeamUncollCandidate<T>* buc_nb = nullptr;
+    if (p == nullptr) {
+      buc_b = new BeamUncollCandidate<T>(kLogZero<T>());
+      buc_nb = new BeamUncollCandidate<T>(0);
+    } else {
+    //if (p != nullptr) {
+      if (p->uncoll_blank != nullptr)
+        buc_b = p->uncoll_blank->clone();
+      if (p->uncoll_nblank != nullptr)
+        buc_nb = p->uncoll_nblank->clone();
+    }
+    auto* new_entry = new BeamEntry<T, CTCBeamState>(p, l, this, buc_b, buc_nb);
     beam_entries_.emplace_back(new_entry);
     return new_entry;
   }
