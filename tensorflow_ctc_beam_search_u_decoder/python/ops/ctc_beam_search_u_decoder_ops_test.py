@@ -36,10 +36,19 @@ class CTCBeamSearchUDecoderTest(test.TestCase):
             [[[0, 0], [0, 1]],
              [[0, 0], [0, 1], [0, 2]],
              [[0, 0], [0, 1], [0, 2]]])
+        correct_decoded_uncoll_indices = np.array(
+            [[[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [0, 7]],
+             [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [0, 7]],
+             [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [0, 7]]])
         # Values
         correct_decoded_values = np.array([[1, 0], [1, 1, 0], [1, 0, 0]])
+        correct_decoded_uncoll_values = np.array([
+            [-1, -1, 1, 1, -1, 0, 0, 0],
+            [-1, -1, 1, 1, -1, 1, 0, 0],
+            [-1, -1, 1, 1, -1, 0, -1, 0]])
         # Shape [batch_size, max_shape]
         correct_decoded_shape = np.array([[1, 2], [1, 3], [1, 3]])
+        correct_decoded_uncoll_shape = np.array([[1, 8], [1, 8], [1, 8]])
         # Log probs [batch_size, top_paths]
         correct_log_probs = np.array([[-2.0580008, -2.7012699, -3.620572]])
 
@@ -63,6 +72,21 @@ class CTCBeamSearchUDecoderTest(test.TestCase):
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=3, blank_index=2,
                     top_paths=3, merge_repeated=False)[3],
+                b=correct_decoded_uncoll_indices)
+            self.assertAllClose(
+                a=ctc_beam_search_u_decoder(inputs=test_inputs,
+                    sequence_length=[8], beam_width=3, blank_index=2,
+                    top_paths=3, merge_repeated=False)[4],
+                b=correct_decoded_uncoll_values)
+            self.assertAllClose(
+                a=ctc_beam_search_u_decoder(inputs=test_inputs,
+                    sequence_length=[8], beam_width=3, blank_index=2,
+                    top_paths=3, merge_repeated=False)[5],
+                b=correct_decoded_uncoll_shape)
+            self.assertAllClose(
+                a=ctc_beam_search_u_decoder(inputs=test_inputs,
+                    sequence_length=[8], beam_width=3, blank_index=2,
+                    top_paths=3, merge_repeated=False)[6],
                 b=correct_log_probs)
 
 

@@ -48,6 +48,7 @@ class CTCBeamSearchUDecoder : public CTCUDecoder<T> {
 
     // Extract the top n paths at current time step
     Status TopPaths(int n, std::vector<std::vector<int>>* paths,
+                    std::vector<std::vector<int>>* paths_uncoll,
                     std::vector<T>* log_probs, bool merge_repeated) const;
 
   private:
@@ -96,8 +97,6 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
           // If last two sequence characters are identical:
           //   Plabel(l=acc @ t=6) = (Plabel(l=acc @ t=5) + Pblank(l=ac @ t=5))
           //                         * P(c @ 6)
-          std::cout << "Helping out ";
-          b->Print(true, false);
           b->newp.label = LogSumExp(b->newp.label,
             beam_scorer_->GetStateExpansionScore(b->state, b->parent->oldp.blank))
             + raw_input(b->label) - norm_offset;
@@ -106,56 +105,29 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
           // If the last two sequence characters are not identical:
           //   Plabel(l=abc @ t=6) = (Plabel(l=abc @ t=5) + P(l=ab @ t=5))
           //                         * P(c @ 6)
-          std::cout << "SUpporting ";
-          b->Print(true, false);
           b->newp.label = LogSumExp(b->newp.label,
             beam_scorer_->GetStateExpansionScore(b->state, b->parent->oldp.total))
             + raw_input(b->label) - norm_offset;
           b->AddUncollCandidate(b->parent->uncoll_blank, true, false, b->label, raw_input(b->label) - norm_offset);
           b->AddUncollCandidate(b->parent->uncoll_nblank, false, false, b->label, raw_input(b->label) - norm_offset);
+          b->AddUncollCandidate(b->uncoll_nblank, false, false, b->label, raw_input(b->label) - norm_offset);
         }
       } else {
-        std::cout << "Supplementing ";
-        b->Print(true, false);
         // Plabel(l=abc @ t=6) *= P(c @ 6)
         b->newp.label += raw_input(b->label) - norm_offset;
-        b->AddUncollCandidate(b->parent->uncoll_nblank, false, true, b->label, raw_input(b->label) - norm_offset);
+        b->AddUncollCandidate(b->uncoll_nblank, false, false, b->label, raw_input(b->label) - norm_offset);
       }
-      ////
-      //if (b->parent->Active()) {
-        // If last two sequence characters are identical:
-        //   Plabel(l=acc @ t=6) = (Plabel(l=acc @ t=5)
-        //                          + Pblank(l=ac @ t=5))
-        // else:
-        //   Plabel(l=abc @ t=6) = (Plabel(l=abc @ t=5)
-        //                          + P(l=ab @ t=5))
-        //T previous = (b->label == b->parent->label) ? b->parent->oldp.blank
-        //                                            : b->parent->oldp.total;
-        //b->newp.label = LogSumExp(b->newp.label,
-          //beam_scorer_->GetStateExpansionScore(b->state, previous));
-      //}
-      // Plabel(l=abc @ t=6) *= P(c @ 6)
-      //b->newp.label += raw_input(b->label) - norm_offset;
-      //b->AddUncollCandidate(, false, b->label, b->newp.label);
     }
     // Adding a blank to the entry
     // Pblank(l=abc @ t=6) = P(l=abc @ t=5) * P(- @ 6)
     b->newp.blank = b->oldp.total + raw_input(this->blank_index_) - norm_offset;
-    // TODO do I need the norm_offset in AddUnrullCandidate?
-    //std::cout << "Makin' -1" << std::endl;
-    //b->Print(true, true);
     b->AddUncollCandidate(b->uncoll_blank, true, true, -1, raw_input(this->blank_index_)-norm_offset);
-    //b->Print(true, true);
     b->AddUncollCandidate(b->uncoll_nblank, false, true, -1, raw_input(this->blank_index_)-norm_offset);
-    //b->Print(true, true);
-    //std::cout << "Done makin' -1" << std::endl;
     // Calculate p_total = p_label + p_blank
     // P(l=abc @ t=6) = Plabel(l=abc @ t=6) + Pblank(l=abc @ t=6)
     b->newp.total = LogSumExp(b->newp.blank, b->newp.label);
     // Push the entry back to the top paths list.
     // Note, this will always fill leaves back up in sorted order.
-    //std::cout << "NewA:" << std::endl;
-    //b->Print(true, false);
     leaves_.push(b);
   }
 
@@ -174,27 +146,16 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
     if (!is_candidate(b->oldp)) {
       continue;
     }
-    //std::cout << "B" << std::endl;
-    //b->Print(true, true);
 
     for (int ind = 0; ind < max_classes; ind++) {
       const int label = ind;
       const T logit = raw_input(ind);
       // The new BeamEntry
       BeamEntry& c = b->GetChild(label);
-      //std::cout << "B->C" << std::endl;
-      //c.Print(true, true);
       if (!c.Active()) {
-        std::cout << "Extending ";
-        b->Print(true, false);
-        std::cout << "with " << label << std::endl;
-        //std::cout << "go!" << std::endl;
-        //   Pblank(l=abcd @ t=6) = 0
+        // Pblank(l=abcd @ t=6) = 0
         c.newp.blank = kLogZero<T>();
         beam_scorer_->ExpandState(b->state, b->label, &c.state, c.label);
-        //T previous = (c.label == b->label) ? b->oldp.blank : b->oldp.total;
-        //c.newp.label = logit - norm_offset +
-        //               beam_scorer_->GetStateExpansionScore(c.state, previous);
         if (c.label == b->label) {
           // If new child label is identical to beam label:
           //   Plabel(l=abcc @ t=6) = Pblank(l=abc @ t=5) * P(c @ 6)
@@ -206,9 +167,6 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
           //   Plabel(l=abcd @ t=6) = P(l=abc @ t=5) * P(d @ 6)
           c.newp.label = logit - norm_offset +
                          beam_scorer_->GetStateExpansionScore(c.state, b->oldp.total);
-          //if (b->uncoll_blank != nullptr) {
-          //  std::cout << "Add " << b->uncoll_blank->Print() << std::endl;
-          //}
           c.AddUncollCandidate(b->uncoll_blank, true, false, label, logit - norm_offset);
           c.AddUncollCandidate(b->uncoll_nblank, false, false, label, logit - norm_offset);
         }
@@ -223,25 +181,28 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
             // its probability; signal it's no longer in the beam search.
             BeamEntry* bottom = leaves_.peek_bottom();
             bottom->newp.Reset();
+            bottom->uncoll_blank = nullptr;
+            bottom->uncoll_nblank = nullptr;
+            bottom->uncoll_cand_blank.clear();
+            bottom->uncoll_cand_nblank.clear();
           }
-          //std::cout << "NewB:" << std::endl;
-          //c.Print(true, false);
           leaves_.push(&c);
         } else {
           // Deactivate child.
           c.oldp.Reset();
           c.newp.Reset();
+          c.uncoll_blank = nullptr;
+          c.uncoll_nblank = nullptr;
+          c.uncoll_cand_blank.clear();
+          c.uncoll_cand_nblank.clear();
         }
       }
     }
   }
-  std::cout << "EndStep:" << std::endl;
   // Resolve candidates in each beam
-  std::unique_ptr<std::vector<BeamEntry*>> branches_2(leaves_.ExtractNondestructive());
-  for (BeamEntry* b : *branches_2) {
-    b->Print(true, true);
+  std::unique_ptr<std::vector<BeamEntry*>> branches_(leaves_.ExtractNondestructive());
+  for (BeamEntry* b : *branches_) {
     b->ResolveUncoll();
-    b->Print(true, true);
   }
 }
 
@@ -264,9 +225,11 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Reset() {
 
 template <typename T, typename CTCBeamState, typename CTCBeamComparer>
 Status CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::TopPaths(
-    int n, std::vector<std::vector<int>>* paths, std::vector<T>* log_probs,
+    int n, std::vector<std::vector<int>>* paths,
+    std::vector<std::vector<int>>* paths_uncoll, std::vector<T>* log_probs,
     bool merge_repeated) const {
   CHECK_NOTNULL(paths)->clear();
+  CHECK_NOTNULL(paths_uncoll)->clear();
   CHECK_NOTNULL(log_probs)->clear();
   if (n > beam_width_) {
     return errors::InvalidArgument("requested more paths than the beam width.");
@@ -287,6 +250,7 @@ Status CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::TopPaths(
 
   for (int i = 0; i < n; ++i) {
     BeamEntry* e((*branches)[i]);
+    paths_uncoll->push_back(e->LabelSeqUncoll());
     paths->push_back(e->LabelSeq(merge_repeated));
     log_probs->push_back(e->newp.total);
   }

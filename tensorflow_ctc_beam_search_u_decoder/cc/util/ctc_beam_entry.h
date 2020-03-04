@@ -46,8 +46,7 @@ struct BeamProbability {
 
 template <typename T>
 struct BeamUncollCandidate {
-  BeamUncollCandidate() : prob(kLogZero<T>()), active(false) {}
-  BeamUncollCandidate(T p) : prob(p), active(false) {}
+  BeamUncollCandidate() : prob(kLogZero<T>()) {}
   BeamUncollCandidate(std::vector<int> l, T p) : prob(p), label_seq(l) {}
   T prob;
   std::vector<int> label_seq;
@@ -76,6 +75,7 @@ struct BeamEntry {
   friend BeamEntry<T, CTCBeamState>* BeamRoot<T, CTCBeamState>::AddEntry(
       BeamEntry<T, CTCBeamState>* p, int l);
   inline bool Active() const { return newp.total != kLogZero<T>(); }
+  inline bool New() const { return oldp.total == kLogZero<T>(); }
   // Return the child at the given index, or construct a new one in-place if
   // none was found.
   BeamEntry<T, CTCBeamState>& GetChild(int ind) {
@@ -101,27 +101,53 @@ struct BeamEntry {
     std::reverse(labels.begin(), labels.end());
     return labels;
   }
+  std::vector<int> LabelSeqUncoll() const {
+    std::vector<int> labels;
+    if (uncoll_blank != nullptr && uncoll_nblank != nullptr) {
+      if (uncoll_blank->prob > uncoll_nblank->prob)
+        labels = uncoll_blank->label_seq;
+      else
+        labels = uncoll_nblank->label_seq;
+    } else if (uncoll_blank != nullptr) {
+      labels = uncoll_blank->label_seq;
+    } else if (uncoll_nblank != nullptr) {
+      labels = uncoll_nblank->label_seq;
+    } else {
+      std::cout << "No label seq available" << std::endl;
+    }
+    return labels;
+  }
 
   BeamEntry<T, CTCBeamState>* parent;
   int label;
 
+  // TODO solve this using an automatically sorting TopN instead
   BeamUncollCandidate<T>* uncoll_blank = nullptr;
   BeamUncollCandidate<T>* uncoll_nblank = nullptr;
   std::vector<BeamUncollCandidate<T>*> uncoll_cand_blank;
   std::vector<BeamUncollCandidate<T>*> uncoll_cand_nblank;
   void AddUncollCandidate(BeamUncollCandidate<T>* old_uncoll,
     bool from_blank, bool to_blank, int l, T p) {
-    // README: Didn't finish here yesterday. I am not sure what is the best way
-    //   to track the status if uncoll_blank and uncoll_nblank. Maybe somehting
-    //   with bool active?
-    // Previous label sequence
-    std::vector<int> old_label_seq = old_uncoll->label_seq;
-    // Previous probability
-    T old_prob = old_uncoll->prob;
-    // Concat with previous uncoll label
+    std::vector<int> old_label_seq;
+    T old_prob;
+    if (old_uncoll == nullptr) {
+      // If no previous UncollCandidate exists, we will start a new one with
+      //  probability 0 if dealing with a new Beam in the first or second time
+      //  step, otherwise with kLogZero
+      if (parent == nullptr || parent->parent == nullptr && New()) {
+        old_prob = from_blank ? 0 : kLogZero<T>();
+      } else {
+        old_prob = kLogZero<T>();
+      }
+    } else {
+      // Build on the previous UncollCandidate
+      old_prob = old_uncoll->prob;
+      old_label_seq = old_uncoll->label_seq;
+    }
+    // Concat the label
     std::vector<int> new_label_seq(old_label_seq);
     new_label_seq.push_back(l);
-    // New probability by adding to parent uncoll
+    // Add the probabilities since we are using log probabilities
     T new_prob = old_prob + p;
     // New BeamUncollCandidate
     BeamUncollCandidate<T>* new_uncoll = new BeamUncollCandidate<T>(
@@ -132,8 +158,10 @@ struct BeamEntry {
     } else {
       uncoll_cand_nblank.push_back(new_uncoll);
     }
+    //std::cout << "   produced " << new_uncoll->Print() << std::endl;
   }
   void ResolveUncoll() {
+    // Sort candidates, save most likely and clear
     if (uncoll_cand_blank.size() > 0) {
       std::sort(uncoll_cand_blank.begin(), uncoll_cand_blank.end(),
         [](BeamUncollCandidate<T>* a, BeamUncollCandidate<T>* b) {
@@ -155,7 +183,6 @@ struct BeamEntry {
       uncoll_cand_nblank.clear();
     }
   }
-
   void Print(bool new_, bool full) {
     std::vector<int> label_seq = LabelSeq(false);
     std::stringstream ss;
@@ -169,9 +196,9 @@ struct BeamEntry {
       std::cout << "====================" << std::endl;
     }
     if (new_) {
-      std::cout << "[label=" << s << "; " << "p_blank=" << newp.blank << "; " << "p_label=" << newp.label << "; " << "p_total=" << newp.total << "]" << std::endl;
+      std::cout << "[label=" << s << "; " << "newp_blank=" << newp.blank << "; " << "newp_label=" << newp.label << "; " << "newp_total=" << newp.total << "]" << std::endl;
     } else {
-      std::cout << "[label=" << s << "; " << "p_blank=" << oldp.blank << "; " << "p_label=" << oldp.label << "; " << "p_total=" << oldp.total << "]" << std::endl;
+      std::cout << "[label=" << s << "; " << "oldp_blank=" << oldp.blank << "; " << "oldp_label=" << oldp.label << "; " << "oldp_total=" << oldp.total << "]" << std::endl;
     }
     if (full) {
       std::cout << "------- blank ------" << std::endl;
@@ -232,13 +259,10 @@ class BeamRoot {
   BeamRoot& operator=(const BeamRoot&) = delete;
 
   BeamEntry<T, CTCBeamState>* AddEntry(BeamEntry<T, CTCBeamState>* p, int l) {
+    // Copy the UncollCandidate from parent if available
     BeamUncollCandidate<T>* buc_b = nullptr;
     BeamUncollCandidate<T>* buc_nb = nullptr;
-    if (p == nullptr) {
-      buc_b = new BeamUncollCandidate<T>(kLogZero<T>());
-      buc_nb = new BeamUncollCandidate<T>(0);
-    } else {
-    //if (p != nullptr) {
+    if (p != nullptr) {
       if (p->uncoll_blank != nullptr)
         buc_b = p->uncoll_blank->clone();
       if (p->uncoll_nblank != nullptr)
