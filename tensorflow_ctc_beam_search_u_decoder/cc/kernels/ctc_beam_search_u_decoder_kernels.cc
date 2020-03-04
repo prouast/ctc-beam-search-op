@@ -13,6 +13,7 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
       OP_REQUIRES_OK(ctx, ctx->GetAttr("merge_repeated", &merge_repeated_));
       OP_REQUIRES_OK(ctx, ctx->GetAttr("beam_width", &beam_width_));
       OP_REQUIRES_OK(ctx, ctx->GetAttr("blank_index", &blank_index_));
+      OP_REQUIRES_OK(ctx, ctx->GetAttr("blank_label", &blank_label_));
       OP_REQUIRES_OK(ctx, ctx->GetAttr("top_paths", &top_paths_));
     }
 
@@ -52,8 +53,8 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
 
       // The decoder
       ctc::CTCBeamSearchUDecoder<T> decoder(num_classes, blank_index_,
-                                            beam_width_, &beam_scorer_, 1,
-                                            merge_repeated_);
+                                            beam_width_, &beam_scorer_,
+                                            blank_label_, 1, merge_repeated_);
 
       Tensor input_chip(DataTypeToEnum<T>::v(), TensorShape({num_classes}));
       auto input_chip_t = input_chip.flat<T>();
@@ -261,6 +262,7 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
     bool merge_repeated_;
     int beam_width_;
     int blank_index_;
+    int blank_label_;
     int top_paths_;
     TF_DISALLOW_COPY_AND_ASSIGN(CTCBeamSearchUDecoderOp);
 };

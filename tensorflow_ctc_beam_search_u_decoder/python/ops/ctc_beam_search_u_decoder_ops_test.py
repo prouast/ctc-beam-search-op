@@ -56,37 +56,37 @@ class CTCBeamSearchUDecoderTest(test.TestCase):
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=3, blank_index=2,
-                    top_paths=3, merge_repeated=False)[0],
+                    top_paths=3, blank_label=-1, merge_repeated=False)[0],
                 b=correct_decoded_indices)
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=3, blank_index=2,
-                    top_paths=3, merge_repeated=False)[1],
+                    top_paths=3, blank_label=-1, merge_repeated=False)[1],
                 b=correct_decoded_values)
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=3, blank_index=2,
-                    top_paths=3, merge_repeated=False)[2],
+                    top_paths=3, blank_label=-1, merge_repeated=False)[2],
                 b=correct_decoded_shape)
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=3, blank_index=2,
-                    top_paths=3, merge_repeated=False)[3],
+                    top_paths=3, blank_label=-1, merge_repeated=False)[3],
                 b=correct_decoded_uncoll_indices)
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=3, blank_index=2,
-                    top_paths=3, merge_repeated=False)[4],
+                    top_paths=3, blank_label=-1, merge_repeated=False)[4],
                 b=correct_decoded_uncoll_values)
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=3, blank_index=2,
-                    top_paths=3, merge_repeated=False)[5],
+                    top_paths=3, blank_label=-1, merge_repeated=False)[5],
                 b=correct_decoded_uncoll_shape)
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=3, blank_index=2,
-                    top_paths=3, merge_repeated=False)[6],
+                    top_paths=3, blank_label=-1, merge_repeated=False)[6],
                 b=correct_log_probs)
 
     def testCTCBeamSearchUDecoderV2(self):
@@ -139,37 +139,37 @@ class CTCBeamSearchUDecoderTest(test.TestCase):
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=10, blank_index=2,
-                    top_paths=5, merge_repeated=False)[0],
+                    top_paths=5, blank_label=-1, merge_repeated=False)[0],
                 b=correct_decoded_indices)
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=10, blank_index=2,
-                    top_paths=5, merge_repeated=False)[1],
+                    top_paths=5, blank_label=-1, merge_repeated=False)[1],
                 b=correct_decoded_values)
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=10, blank_index=2,
-                    top_paths=5, merge_repeated=False)[2],
+                    top_paths=5, blank_label=-1, merge_repeated=False)[2],
                 b=correct_decoded_shape)
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=10, blank_index=2,
-                    top_paths=5, merge_repeated=False)[3],
+                    top_paths=5, blank_label=-1, merge_repeated=False)[3],
                 b=correct_decoded_uncoll_indices)
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=10, blank_index=2,
-                    top_paths=5, merge_repeated=False)[4],
+                    top_paths=5, blank_label=-1, merge_repeated=False)[4],
                 b=correct_decoded_uncoll_values)
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=10, blank_index=2,
-                    top_paths=5, merge_repeated=False)[5],
+                    top_paths=5, blank_label=-1, merge_repeated=False)[5],
                 b=correct_decoded_uncoll_shape)
             self.assertAllClose(
                 a=ctc_beam_search_u_decoder(inputs=test_inputs,
                     sequence_length=[8], beam_width=10, blank_index=2,
-                    top_paths=5, merge_repeated=False)[6],
+                    top_paths=5, blank_label=-1, merge_repeated=False)[6],
                 b=correct_log_probs)
 
 

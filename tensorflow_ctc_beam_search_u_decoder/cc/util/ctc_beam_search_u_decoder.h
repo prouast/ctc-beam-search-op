@@ -25,10 +25,11 @@ class CTCBeamSearchUDecoder : public CTCUDecoder<T> {
     // Constructor
     CTCBeamSearchUDecoder(int num_classes, int blank_index, int beam_width,
                           BaseBeamScorer<T, CTCBeamState>* scorer,
-                          int batch_size=1, bool merge_repeated=false)
+                          int blank_label=1, int batch_size=1,
+                          bool merge_repeated=false)
         : CTCUDecoder<T>(num_classes, blank_index, batch_size, merge_repeated),
           beam_width_(beam_width), leaves_(beam_width),
-          beam_scorer_(CHECK_NOTNULL(scorer)) {
+          beam_scorer_(CHECK_NOTNULL(scorer)), blank_label_(blank_label) {
       Reset();
     }
 
@@ -54,6 +55,7 @@ class CTCBeamSearchUDecoder : public CTCUDecoder<T> {
   private:
 
     int beam_width_;
+    int blank_label_;
     gtl::TopN<BeamEntry*, CTCBeamComparer> leaves_;
     std::unique_ptr<BeamRoot> beam_root_;
     BaseBeamScorer<T, CTCBeamState>* beam_scorer_;
@@ -100,7 +102,8 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
           b->newp.label = LogSumExp(b->newp.label,
             beam_scorer_->GetStateExpansionScore(b->state, b->parent->oldp.blank))
             + raw_input(b->label) - norm_offset;
-          b->AddUncollCandidate(b->parent->uncoll_blank, true, false, b->label, raw_input(b->label) - norm_offset);
+          b->AddUncollCandidate(b->parent->uncoll_blank, true, false, b->label,
+            raw_input(b->label) - norm_offset);
         } else {
           // If the last two sequence characters are not identical:
           //   Plabel(l=abc @ t=6) = (Plabel(l=abc @ t=5) + P(l=ab @ t=5))
@@ -108,21 +111,27 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
           b->newp.label = LogSumExp(b->newp.label,
             beam_scorer_->GetStateExpansionScore(b->state, b->parent->oldp.total))
             + raw_input(b->label) - norm_offset;
-          b->AddUncollCandidate(b->parent->uncoll_blank, true, false, b->label, raw_input(b->label) - norm_offset);
-          b->AddUncollCandidate(b->parent->uncoll_nblank, false, false, b->label, raw_input(b->label) - norm_offset);
-          b->AddUncollCandidate(b->uncoll_nblank, false, false, b->label, raw_input(b->label) - norm_offset);
+          b->AddUncollCandidate(b->parent->uncoll_blank, true, false, b->label,
+            raw_input(b->label) - norm_offset);
+          b->AddUncollCandidate(b->parent->uncoll_nblank, false, false, b->label,
+            raw_input(b->label) - norm_offset);
+          b->AddUncollCandidate(b->uncoll_nblank, false, false, b->label,
+            raw_input(b->label) - norm_offset);
         }
       } else {
         // Plabel(l=abc @ t=6) *= P(c @ 6)
         b->newp.label += raw_input(b->label) - norm_offset;
-        b->AddUncollCandidate(b->uncoll_nblank, false, false, b->label, raw_input(b->label) - norm_offset);
+        b->AddUncollCandidate(b->uncoll_nblank, false, false, b->label,
+          raw_input(b->label) - norm_offset);
       }
     }
     // Adding a blank to the entry
     // Pblank(l=abc @ t=6) = P(l=abc @ t=5) * P(- @ 6)
     b->newp.blank = b->oldp.total + raw_input(this->blank_index_) - norm_offset;
-    b->AddUncollCandidate(b->uncoll_blank, true, true, -1, raw_input(this->blank_index_)-norm_offset);
-    b->AddUncollCandidate(b->uncoll_nblank, false, true, -1, raw_input(this->blank_index_)-norm_offset);
+    b->AddUncollCandidate(b->uncoll_blank, true, true, blank_label_,
+      raw_input(this->blank_index_)-norm_offset);
+    b->AddUncollCandidate(b->uncoll_nblank, false, true, blank_label_,
+      raw_input(this->blank_index_)-norm_offset);
     // Calculate p_total = p_label + p_blank
     // P(l=abc @ t=6) = Plabel(l=abc @ t=6) + Pblank(l=abc @ t=6)
     b->newp.total = LogSumExp(b->newp.blank, b->newp.label);
@@ -160,15 +169,18 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
           // If new child label is identical to beam label:
           //   Plabel(l=abcc @ t=6) = Pblank(l=abc @ t=5) * P(c @ 6)
           c.newp.label = logit - norm_offset +
-                         beam_scorer_->GetStateExpansionScore(c.state, b->oldp.blank);
-          c.AddUncollCandidate(b->uncoll_blank, true, false, label, logit - norm_offset);
+            beam_scorer_->GetStateExpansionScore(c.state, b->oldp.blank);
+          c.AddUncollCandidate(b->uncoll_blank, true, false, label,
+            logit - norm_offset);
         } else {
           // Otherwise:
           //   Plabel(l=abcd @ t=6) = P(l=abc @ t=5) * P(d @ 6)
           c.newp.label = logit - norm_offset +
-                         beam_scorer_->GetStateExpansionScore(c.state, b->oldp.total);
-          c.AddUncollCandidate(b->uncoll_blank, true, false, label, logit - norm_offset);
-          c.AddUncollCandidate(b->uncoll_nblank, false, false, label, logit - norm_offset);
+            beam_scorer_->GetStateExpansionScore(c.state, b->oldp.total);
+          c.AddUncollCandidate(b->uncoll_blank, true, false, label,
+            logit - norm_offset);
+          c.AddUncollCandidate(b->uncoll_nblank, false, false, label,
+            logit - norm_offset);
         }
         // P(l=abcd @ t=6) = Plabel(l=abcd @ t=6)
         c.newp.total = c.newp.label;
