@@ -166,15 +166,25 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
       OpOutputList* dec_indices, OpOutputList* dec_values,
       OpOutputList* dec_shape, OpOutputList* dec_uncoll_indices,
       OpOutputList* dec_uncoll_values, OpOutputList* dec_uncoll_shape) const {
+
       // Calculate the total number of entries for each path
       const int64 batch_size = sequences.size();
       std::vector<int64> num_entries(top_paths_, 0);
+      std::vector<int64> num_entries_uncoll(top_paths_, 0);
 
       // Calculate num_entries per path
       for (const auto& batch_s : sequences) {
         CHECK_EQ(batch_s.size(), top_paths_);
         for (int p = 0; p < top_paths_; ++p) {
           num_entries[p] += batch_s[p].size();
+        }
+      }
+
+      // Calculate num_entries per uncoll path
+      for (const auto& batch_s : sequences_uncoll) {
+        CHECK_EQ(batch_s.size(), top_paths_);
+        for (int p = 0; p < top_paths_; ++p) {
+          num_entries_uncoll[p] += batch_s[p].size();
         }
       }
 
@@ -187,6 +197,7 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
         Tensor* p_uncoll_shape = nullptr;
 
         const int64 p_num = num_entries[p];
+        const int64 p_num_uncoll = num_entries_uncoll[p];
 
         Status s = dec_indices->allocate(p, TensorShape({p_num, 2}), &p_indices);
         if (!s.ok()) return s;
@@ -194,9 +205,9 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
         if (!s.ok()) return s;
         s = dec_shape->allocate(p, TensorShape({2}), &p_shape);
         if (!s.ok()) return s;
-        s = dec_uncoll_indices->allocate(p, TensorShape({8, 2}), &p_uncoll_indices);
+        s = dec_uncoll_indices->allocate(p, TensorShape({p_num_uncoll, 2}), &p_uncoll_indices);
         if (!s.ok()) return s;
-        s = dec_uncoll_values->allocate(p, TensorShape({8}), &p_uncoll_values);
+        s = dec_uncoll_values->allocate(p, TensorShape({p_num_uncoll}), &p_uncoll_values);
         if (!s.ok()) return s;
         s = dec_uncoll_shape->allocate(p, TensorShape({2}), &p_uncoll_shape);
         if (!s.ok()) return s;
@@ -210,8 +221,6 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
 
         int64 max_decoded = 0;
         int64 offset = 0;
-        int64 num_decoded_uncoll = 8;
-        int64 offset_uncoll = 0;
 
         for (int64 b = 0; b < batch_size; ++b) {
           auto& p_batch = sequences[b][p];
@@ -227,17 +236,22 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
         shape_t(0) = batch_size;
         shape_t(1) = max_decoded;
 
+        max_decoded = 0;
+        offset = 0;
+
         for (int64 b = 0; b < batch_size; ++b) {
-          auto& p_uncoll_batch = sequences_uncoll[b][p];
-          std::copy_n(p_uncoll_batch.begin(), num_decoded_uncoll, &uncoll_values_t(offset_uncoll));
-          for (int64 t = 0; t < num_decoded_uncoll; ++t, ++offset_uncoll) {
-            uncoll_indices_t(offset_uncoll, 0) = b;
-            uncoll_indices_t(offset_uncoll, 1) = t;
+          auto& p_batch = sequences_uncoll[b][p];
+          int64 num_decoded = p_batch.size();
+          max_decoded = std::max(max_decoded, num_decoded);
+          std::copy_n(p_batch.begin(), num_decoded, &uncoll_values_t(offset));
+          for (int64 t = 0; t < num_decoded; ++t, ++offset) {
+            uncoll_indices_t(offset, 0) = b;
+            uncoll_indices_t(offset, 1) = t;
           }
         }
 
         uncoll_shape_t(0) = batch_size;
-        uncoll_shape_t(1) = num_decoded_uncoll;
+        uncoll_shape_t(1) = max_decoded;
       }
       return Status::OK();
     }
