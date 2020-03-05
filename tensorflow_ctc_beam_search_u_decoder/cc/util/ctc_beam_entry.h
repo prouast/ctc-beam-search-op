@@ -15,9 +15,8 @@ limitations under the License.
 #include <vector>
 #include <iostream>
 #include <sstream>
-
+#include <queue>
 #include "ctc_loss_util.h"
-
 #include "third_party/eigen3/Eigen/Core"
 #include "tensorflow/core/lib/gtl/flatmap.h"
 #include "tensorflow/core/platform/logging.h"
@@ -66,6 +65,39 @@ struct BeamUncollCandidate {
   }
 };
 
+template <class T>
+class BeamUncollCandidateComparer {
+ public:
+  virtual ~BeamUncollCandidateComparer() {}
+  virtual bool inline operator()(const BeamUncollCandidate<T>* a,
+                                 const BeamUncollCandidate<T>* b) const {
+    return a->prob < b->prob;
+  }
+};
+
+template <typename T>
+struct BeamUncoll {
+  BeamUncoll() : cands_blank(), cands_nblank() {}
+  std::priority_queue<BeamUncollCandidate<T>*, std::vector<BeamUncollCandidate<T>*>, BeamUncollCandidateComparer<T>> cands_blank;
+  std::priority_queue<BeamUncollCandidate<T>*, std::vector<BeamUncollCandidate<T>*>, BeamUncollCandidateComparer<T>> cands_nblank;
+  void Reset() {
+    while (!cands_blank.empty()) {
+      cands_blank.pop();
+    }
+    while (!cands_nblank.empty()) {
+      cands_nblank.pop();
+    }
+  }
+  BeamUncollCandidate<T>* GetBlank() {
+    BeamUncollCandidate<T>* result = cands_blank.top();
+    return result;
+  }
+  BeamUncollCandidate<T>* GetNBlank() {
+    BeamUncollCandidate<T>* result = cands_nblank.top();
+    return result;
+  }
+};
+
 template <class T, class CTCBeamState>
 class BeamRoot;
 
@@ -101,33 +133,66 @@ struct BeamEntry {
     std::reverse(labels.begin(), labels.end());
     return labels;
   }
-  std::vector<int> LabelSeqUncoll() const {
+  std::vector<int> LabelSeqUncoll() {
     std::vector<int> labels;
-    if (uncoll_blank != nullptr && uncoll_nblank != nullptr) {
-      if (uncoll_blank->prob > uncoll_nblank->prob)
-        labels = uncoll_blank->label_seq;
+    if (!new_cands.cands_blank.empty() && !new_cands.cands_nblank.empty()) {
+      if (new_cands.GetBlank()->prob > new_cands.GetNBlank()->prob)
+        labels = new_cands.GetBlank()->label_seq;
       else
-        labels = uncoll_nblank->label_seq;
-    } else if (uncoll_blank != nullptr) {
-      labels = uncoll_blank->label_seq;
-    } else if (uncoll_nblank != nullptr) {
-      labels = uncoll_nblank->label_seq;
+        labels = new_cands.GetNBlank()->label_seq;
+    } else if (!new_cands.cands_blank.empty()) {
+      labels = new_cands.GetBlank()->label_seq;
+    } else if (!new_cands.cands_nblank.empty()) {
+      labels = new_cands.GetNBlank()->label_seq;
     } else {
       std::cout << "No label seq available" << std::endl;
     }
     return labels;
   }
+  void Print(bool new_, bool full) {
+    std::vector<int> label_seq = LabelSeq(false);
+    std::stringstream ss;
+    for (size_t i = 0; i < label_seq.size(); ++i) {
+      if (i != 0)
+        ss << ",";
+      ss << label_seq[i];
+    }
+    std::string s = ss.str();
+    if (full) {
+      std::cout << "====================" << std::endl;
+    }
+    if (new_) {
+      std::cout << "[label=" << s << "; " << "newp_blank=" << newp.blank << "; " << "newp_label=" << newp.label << "; " << "newp_total=" << newp.total << "]" << std::endl;
+    } else {
+      std::cout << "[label=" << s << "; " << "oldp_blank=" << oldp.blank << "; " << "oldp_label=" << oldp.label << "; " << "oldp_total=" << oldp.total << "]" << std::endl;
+    }
+    if (full) {
+      BeamUncoll<T> cands = new_ ? new_cands : old_cands;
+      std::cout << "------- top blank ------" << std::endl;
+      if (!cands.cands_blank.empty()) {
+        std::cout << cands.GetBlank()->Print() << std::endl;
+      }
+      std::cout << "------- top nblank ------" << std::endl;
+      if (!cands.cands_nblank.empty()) {
+        std::cout << cands.GetNBlank()->Print() << std::endl;
+      }
+      std::cout << "====================" << std::endl;
+    }
+  }
 
   BeamEntry<T, CTCBeamState>* parent;
   int label;
+  BeamUncoll<T> old_cands;
+  BeamUncoll<T> new_cands;
 
-  // TODO solve this using an automatically sorting TopN instead
-  BeamUncollCandidate<T>* uncoll_blank = nullptr;
-  BeamUncollCandidate<T>* uncoll_nblank = nullptr;
-  std::vector<BeamUncollCandidate<T>*> uncoll_cand_blank;
-  std::vector<BeamUncollCandidate<T>*> uncoll_cand_nblank;
-  void AddUncollCandidate(BeamUncollCandidate<T>* old_uncoll,
-    bool from_blank, bool to_blank, int l, T p) {
+  void AddUncollCandidate(BeamEntry<T>* entry, bool from_blank, bool to_blank, int l, T p) {
+    // Get old UncollCandidate
+    BeamUncollCandidate<T>* old_uncoll = nullptr;
+    if (from_blank && !entry->old_cands.cands_blank.empty())
+      old_uncoll = entry->old_cands.GetBlank();
+    else if (!from_blank && !entry->old_cands.cands_nblank.empty())
+      old_uncoll = entry->old_cands.GetNBlank();
+    // Get old probability
     std::vector<int> old_label_seq;
     T old_prob;
     if (old_uncoll == nullptr) {
@@ -154,76 +219,9 @@ struct BeamEntry {
       new_label_seq, new_prob);
     // Add new BeamUncollCandidate
     if (to_blank) {
-      uncoll_cand_blank.push_back(new_uncoll);
+      new_cands.cands_blank.push(new_uncoll);
     } else {
-      uncoll_cand_nblank.push_back(new_uncoll);
-    }
-    //std::cout << "   produced " << new_uncoll->Print() << std::endl;
-  }
-  void ResolveUncoll() {
-    // Sort candidates, save most likely and clear
-    if (uncoll_cand_blank.size() > 0) {
-      std::sort(uncoll_cand_blank.begin(), uncoll_cand_blank.end(),
-        [](BeamUncollCandidate<T>* a, BeamUncollCandidate<T>* b) {
-          return a->prob > b->prob; });
-      uncoll_blank = uncoll_cand_blank[0];
-      for (int i = 1; i < uncoll_cand_blank.size(); ++i) {
-        delete uncoll_cand_blank[i];
-      }
-      uncoll_cand_blank.clear();
-    }
-    if (uncoll_cand_nblank.size() > 0) {
-      std::sort(uncoll_cand_nblank.begin(), uncoll_cand_nblank.end(),
-        [](BeamUncollCandidate<T>* a, BeamUncollCandidate<T>* b) {
-          return a->prob > b->prob; });
-      uncoll_nblank = uncoll_cand_nblank[0];
-      for (int i = 1; i < uncoll_cand_nblank.size(); ++i) {
-        delete uncoll_cand_nblank[i];
-      }
-      uncoll_cand_nblank.clear();
-    }
-  }
-  void Print(bool new_, bool full) {
-    std::vector<int> label_seq = LabelSeq(false);
-    std::stringstream ss;
-    for (size_t i = 0; i < label_seq.size(); ++i) {
-      if (i != 0)
-        ss << ",";
-      ss << label_seq[i];
-    }
-    std::string s = ss.str();
-    if (full) {
-      std::cout << "====================" << std::endl;
-    }
-    if (new_) {
-      std::cout << "[label=" << s << "; " << "newp_blank=" << newp.blank << "; " << "newp_label=" << newp.label << "; " << "newp_total=" << newp.total << "]" << std::endl;
-    } else {
-      std::cout << "[label=" << s << "; " << "oldp_blank=" << oldp.blank << "; " << "oldp_label=" << oldp.label << "; " << "oldp_total=" << oldp.total << "]" << std::endl;
-    }
-    if (full) {
-      std::cout << "------- blank ------" << std::endl;
-      if (uncoll_blank != nullptr) {
-        std::cout << "(resolved)" << std::endl;
-        std::cout << uncoll_blank->Print() << std::endl;
-      }
-      if (uncoll_cand_blank.size() > 0) {
-        std::cout << "(candidates)" << std::endl;
-        for (BeamUncollCandidate<T>* buc: uncoll_cand_blank) {
-          std::cout << buc->Print() << std::endl;
-        }
-      }
-      std::cout << "------- nblank ------" << std::endl;
-      if (uncoll_nblank != nullptr) {
-        std::cout << "(resolved)" << std::endl;
-        std::cout << uncoll_nblank->Print() << std::endl;
-      }
-      if (uncoll_cand_nblank.size() > 0) {
-        std::cout << "(candidates)" << std::endl;
-        for (BeamUncollCandidate<T>* buc: uncoll_cand_nblank) {
-          std::cout << buc->Print() << std::endl;
-        }
-      }
-      std::cout << "====================" << std::endl;
+      new_cands.cands_nblank.push(new_uncoll);
     }
   }
 
@@ -239,10 +237,8 @@ struct BeamEntry {
   // otherwise parent will become invalid.
   // This private constructor is only called through the factory method
   // BeamRoot<CTCBeamState>::AddEntry().
-  BeamEntry(BeamEntry* p, int l, BeamRoot<T, CTCBeamState>* beam_root,
-            BeamUncollCandidate<T>* buc_b, BeamUncollCandidate<T>* buc_nb)
-      : parent(p), label(l), beam_root(beam_root),
-        uncoll_blank(buc_b), uncoll_nblank(buc_nb) {}
+  BeamEntry(BeamEntry* p, int l, BeamRoot<T, CTCBeamState>* beam_root)
+      : parent(p), label(l), beam_root(beam_root) {}
   BeamRoot<T, CTCBeamState>* beam_root;
   TF_DISALLOW_COPY_AND_ASSIGN(BeamEntry);
 };
@@ -262,13 +258,7 @@ class BeamRoot {
     // Copy the UncollCandidate from parent if available
     BeamUncollCandidate<T>* buc_b = nullptr;
     BeamUncollCandidate<T>* buc_nb = nullptr;
-    if (p != nullptr) {
-      if (p->uncoll_blank != nullptr)
-        buc_b = p->uncoll_blank->clone();
-      if (p->uncoll_nblank != nullptr)
-        buc_nb = p->uncoll_nblank->clone();
-    }
-    auto* new_entry = new BeamEntry<T, CTCBeamState>(p, l, this, buc_b, buc_nb);
+    auto* new_entry = new BeamEntry<T, CTCBeamState>(p, l, this);
     beam_entries_.emplace_back(new_entry);
     return new_entry;
   }
