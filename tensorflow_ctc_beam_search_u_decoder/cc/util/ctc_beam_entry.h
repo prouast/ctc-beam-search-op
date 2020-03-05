@@ -78,8 +78,12 @@ class BeamUncollCandidateComparer {
 template <typename T>
 struct BeamUncoll {
   BeamUncoll() : cands_blank(), cands_nblank() {}
-  std::priority_queue<BeamUncollCandidate<T>*, std::vector<BeamUncollCandidate<T>*>, BeamUncollCandidateComparer<T>> cands_blank;
-  std::priority_queue<BeamUncollCandidate<T>*, std::vector<BeamUncollCandidate<T>*>, BeamUncollCandidateComparer<T>> cands_nblank;
+  std::priority_queue<BeamUncollCandidate<T>*,
+    std::vector<BeamUncollCandidate<T>*>,
+    BeamUncollCandidateComparer<T>> cands_blank;
+  std::priority_queue<BeamUncollCandidate<T>*,
+    std::vector<BeamUncollCandidate<T>*>,
+    BeamUncollCandidateComparer<T>> cands_nblank;
   void Reset() {
     while (!cands_blank.empty()) {
       cands_blank.pop();
@@ -185,6 +189,7 @@ struct BeamEntry {
   BeamUncoll<T> old_cands;
   BeamUncoll<T> new_cands;
 
+  // Add a new UncollCandidate
   void AddUncollCandidate(BeamEntry<T>* entry, bool from_blank, bool to_blank, int l, T p) {
     // Get old UncollCandidate
     BeamUncollCandidate<T>* old_uncoll = nullptr;
