@@ -1,4 +1,5 @@
-// TODO
+// CTC beam search decoder that keeps track of most likely uncollapsed
+//  sequences
 
 #include <vector>
 #include "ctc_beam_scorer.h"

@@ -158,8 +158,6 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
       return Status::OK();
     }
 
-    // TODO parameterize with uncoll sequence lenght
-
     // sequences[b][p][ix] stores decoded value "ix" of path "p" for batch "b".
     Status StoreAllDecodedSequences(
       const std::vector<std::vector<std::vector<int> > >& sequences,
