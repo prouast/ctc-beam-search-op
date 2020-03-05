@@ -89,9 +89,11 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
   for (BeamEntry* b : *branches) {
     // P(.. @ t) becomes the new P(.. @ t-1)
     b->oldp = b->newp;
+    b->old_cands = b->new_cands;
+    b->new_cands.Reset();
   }
 
-  // A. Enter same BeamEntries into new proposals if not already there
+  // Recursion step with existing branches
   for (BeamEntry* b : *branches) {
     if (b->parent != nullptr) {  // Non-empty beam (not the root) or consisting of only blank
       if (b->parent->Active()) { // Previous label exists
@@ -102,8 +104,8 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
           b->newp.label = LogSumExp(b->newp.label,
             beam_scorer_->GetStateExpansionScore(b->state, b->parent->oldp.blank))
             + raw_input(b->label) - norm_offset;
-          b->AddUncollCandidate(b->parent->uncoll_blank, true, false, b->label,
-            raw_input(b->label) - norm_offset);
+          b->AddUncollCandidate(b->parent,
+            true, false, b->label, raw_input(b->label) - norm_offset);
         } else {
           // If the last two sequence characters are not identical:
           //   Plabel(l=abc @ t=6) = (Plabel(l=abc @ t=5) + P(l=ab @ t=5))
@@ -111,27 +113,27 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
           b->newp.label = LogSumExp(b->newp.label,
             beam_scorer_->GetStateExpansionScore(b->state, b->parent->oldp.total))
             + raw_input(b->label) - norm_offset;
-          b->AddUncollCandidate(b->parent->uncoll_blank, true, false, b->label,
-            raw_input(b->label) - norm_offset);
-          b->AddUncollCandidate(b->parent->uncoll_nblank, false, false, b->label,
-            raw_input(b->label) - norm_offset);
-          b->AddUncollCandidate(b->uncoll_nblank, false, false, b->label,
-            raw_input(b->label) - norm_offset);
+          b->AddUncollCandidate(b->parent,
+            true, false, b->label, raw_input(b->label) - norm_offset);
+          b->AddUncollCandidate(b->parent,
+            false, false, b->label, raw_input(b->label) - norm_offset);
+          b->AddUncollCandidate(b,
+            false, false, b->label, raw_input(b->label) - norm_offset);
         }
       } else {
         // Plabel(l=abc @ t=6) *= P(c @ 6)
         b->newp.label += raw_input(b->label) - norm_offset;
-        b->AddUncollCandidate(b->uncoll_nblank, false, false, b->label,
-          raw_input(b->label) - norm_offset);
+        b->AddUncollCandidate(b,
+          false, false, b->label, raw_input(b->label) - norm_offset);
       }
     }
     // Adding a blank to the entry
     // Pblank(l=abc @ t=6) = P(l=abc @ t=5) * P(- @ 6)
     b->newp.blank = b->oldp.total + raw_input(this->blank_index_) - norm_offset;
-    b->AddUncollCandidate(b->uncoll_blank, true, true, blank_label_,
-      raw_input(this->blank_index_)-norm_offset);
-    b->AddUncollCandidate(b->uncoll_nblank, false, true, blank_label_,
-      raw_input(this->blank_index_)-norm_offset);
+    b->AddUncollCandidate(b,
+      true, true, blank_label_, raw_input(this->blank_index_)-norm_offset);
+    b->AddUncollCandidate(b,
+      false, true, blank_label_, raw_input(this->blank_index_)-norm_offset);
     // Calculate p_total = p_label + p_blank
     // P(l=abc @ t=6) = Plabel(l=abc @ t=6) + Pblank(l=abc @ t=6)
     b->newp.total = LogSumExp(b->newp.blank, b->newp.label);
@@ -140,7 +142,7 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
     leaves_.push(b);
   }
 
-  // B. Extend BeamEntries with a non-blank event
+  // Grow new leaves
   for (BeamEntry* b : *branches) {
     // A new leaf (represented by its BeamProbability) is a candidate
     // if its total probability is nonzero and either the beam list
@@ -170,17 +172,17 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
           //   Plabel(l=abcc @ t=6) = Pblank(l=abc @ t=5) * P(c @ 6)
           c.newp.label = logit - norm_offset +
             beam_scorer_->GetStateExpansionScore(c.state, b->oldp.blank);
-          c.AddUncollCandidate(b->uncoll_blank, true, false, label,
-            logit - norm_offset);
+          c.AddUncollCandidate(b,
+            true, false, label, logit - norm_offset);
         } else {
           // Otherwise:
           //   Plabel(l=abcd @ t=6) = P(l=abc @ t=5) * P(d @ 6)
           c.newp.label = logit - norm_offset +
             beam_scorer_->GetStateExpansionScore(c.state, b->oldp.total);
-          c.AddUncollCandidate(b->uncoll_blank, true, false, label,
-            logit - norm_offset);
-          c.AddUncollCandidate(b->uncoll_nblank, false, false, label,
-            logit - norm_offset);
+          c.AddUncollCandidate(b,
+            true, false, label, logit - norm_offset);
+          c.AddUncollCandidate(b,
+            false, false, label, logit - norm_offset);
         }
         // P(l=abcd @ t=6) = Plabel(l=abcd @ t=6)
         c.newp.total = c.newp.label;
@@ -193,29 +195,24 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
             // its probability; signal it's no longer in the beam search.
             BeamEntry* bottom = leaves_.peek_bottom();
             bottom->newp.Reset();
-            bottom->uncoll_blank = nullptr;
-            bottom->uncoll_nblank = nullptr;
-            bottom->uncoll_cand_blank.clear();
-            bottom->uncoll_cand_nblank.clear();
+            bottom->new_cands.Reset();
           }
           leaves_.push(&c);
         } else {
           // Deactivate child.
           c.oldp.Reset();
           c.newp.Reset();
-          c.uncoll_blank = nullptr;
-          c.uncoll_nblank = nullptr;
-          c.uncoll_cand_blank.clear();
-          c.uncoll_cand_nblank.clear();
+          c.old_cands.Reset();
+          c.new_cands.Reset();
         }
       }
     }
   }
   // Resolve candidates in each beam
-  std::unique_ptr<std::vector<BeamEntry*>> branches_(leaves_.ExtractNondestructive());
-  for (BeamEntry* b : *branches_) {
-    b->ResolveUncoll();
-  }
+  //std::unique_ptr<std::vector<BeamEntry*>> branches_(leaves_.ExtractNondestructive());
+  //for (BeamEntry* b : *branches_) {
+  //  b->ResolveUncoll();
+  //}
 }
 
 template <typename T, typename CTCBeamState, typename CTCBeamComparer>
