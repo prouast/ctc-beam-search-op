@@ -2,7 +2,6 @@ CXX := g++
 NVCC := nvcc
 PYTHON_BIN_PATH = python
 
-TIME_TWO_SRCS = tensorflow_time_two/cc/kernels/time_two_kernels.cc $(wildcard tensorflow_time_two/cc/kernels/*.h) $(wildcard tensorflow_time_two/cc/ops/*.cc)
 CTC_BEAM_SEARCH_SRCS = $(wildcard tensorflow_ctc_beam_search_u_decoder/cc/kernels/*.cc) $(wildcard tensorflow_ctc_beam_search_u_decoder/cc/kernels/*.h) $(wildcard tensorflow_ctc_beam_search_u_decoder/cc/ops/*.cc)
 
 TF_CFLAGS := $(shell $(PYTHON_BIN_PATH) -c 'import tensorflow as tf; print(" ".join(tf.sysconfig.get_compile_flags()))')
@@ -13,20 +12,6 @@ LDFLAGS = -shared ${TF_LFLAGS}
 
 CTC_BEAM_SEARCH_TARGET_LIB = tensorflow_ctc_beam_search_u_decoder/python/ops/_ctc_beam_search_u_decoder_ops.so
 TIME_TWO_GPU_ONLY_TARGET_LIB = tensorflow_time_two/python/ops/_time_two_ops.cu.o
-TIME_TWO_TARGET_LIB = tensorflow_time_two/python/ops/_time_two_ops.so
-
-# time_two op for GPU
-time_two_gpu_only: $(TIME_TWO_GPU_ONLY_TARGET_LIB)
-
-$(TIME_TWO_GPU_ONLY_TARGET_LIB): tensorflow_time_two/cc/kernels/time_two_kernels.cu.cc
-	$(NVCC) -std=c++11 -c -o $@ $^  $(CFLAGS) $(TF_LFLAGS) -D GOOGLE_CUDA=1 -x cu -Xcompiler -fPIC -DNDEBUG --expt-relaxed-constexpr
-
-time_two_op: $(TIME_TWO_TARGET_LIB)
-$(TIME_TWO_TARGET_LIB): $(TIME_TWO_SRCS) $(TIME_TWO_GPU_ONLY_TARGET_LIB)
-	$(CXX) $(CFLAGS) -o $@ $^ ${LDFLAGS}  -D GOOGLE_CUDA=1  -I/usr/local/cuda/targets/x86_64-linux/include -L/usr/local/cuda-10.0/targets/x86_64-linux/lib -lcudart
-
-time_two_test: tensorflow_time_two/python/ops/time_two_ops_test.py tensorflow_time_two/python/ops/time_two_ops.py $(TIME_TWO_TARGET_LIB)
-	$(PYTHON_BIN_PATH) tensorflow_time_two/python/ops/time_two_ops_test.py
 
 # ctc_beam_search_u_decoder op for CPU
 ctc_beam_search_u_decoder_op: $(CTC_BEAM_SEARCH_TARGET_LIB)
@@ -41,4 +26,4 @@ ctc_beam_search_u_decoder_pip_pkg: $(CTC_BEAM_SEARCH_TARGET_LIB)
 	./build_pip_pkg.sh make artifacts
 
 clean:
-	rm -f $(TIME_TWO_GPU_ONLY_TARGET_LIB) $(TIME_TWO_TARGET_LIB) $(CTC_BEAM_SEARCH_TARGET_LIB)
+	rm -f $(TIME_TWO_TARGET_LIB) $(CTC_BEAM_SEARCH_TARGET_LIB)
