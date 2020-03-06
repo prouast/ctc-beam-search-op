@@ -11,7 +11,6 @@ CFLAGS = ${TF_CFLAGS} -fPIC -O2 -std=c++11
 LDFLAGS = -shared ${TF_LFLAGS}
 
 CTC_BEAM_SEARCH_TARGET_LIB = tensorflow_ctc_beam_search_u_decoder/python/ops/_ctc_beam_search_u_decoder_ops.so
-TIME_TWO_GPU_ONLY_TARGET_LIB = tensorflow_time_two/python/ops/_time_two_ops.cu.o
 
 # ctc_beam_search_u_decoder op for CPU
 ctc_beam_search_u_decoder_op: $(CTC_BEAM_SEARCH_TARGET_LIB)
@@ -26,4 +25,4 @@ ctc_beam_search_u_decoder_pip_pkg: $(CTC_BEAM_SEARCH_TARGET_LIB)
 	./build_pip_pkg.sh make artifacts
 
 clean:
-	rm -f $(TIME_TWO_TARGET_LIB) $(CTC_BEAM_SEARCH_TARGET_LIB)
+	rm -f $(CTC_BEAM_SEARCH_TARGET_LIB)

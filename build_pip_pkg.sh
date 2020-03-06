@@ -40,7 +40,11 @@ function main() {
   # give us an absolute paths with tilde characters resolved to the destination
   # directory.
   mkdir -p ${DEST}
-  DEST=$(readlink -f "${DEST}")
+  if [[ ${PLATFORM} == "darwin" ]]; then
+    DEST=$(pwd)/${DEST}
+  else
+    DEST=$(readlink -f "${DEST}")
+  fi
   echo "=== destination directory: ${DEST}"
 
   TMPDIR=$(mktemp -d -t tmp.XXXXXXXXXX)
@@ -53,7 +57,7 @@ function main() {
   cp ${PIP_FILE_PREFIX}MANIFEST.in "${TMPDIR}"
   cp ${PIP_FILE_PREFIX}LICENSE "${TMPDIR}"
   touch "${TMPDIR}"/stub.cc
-  rsync -avm -L --exclude='*_test.py' ${PIP_FILE_PREFIX}tensorflow_ctc_beam_search_uncoll "${TMPDIR}"
+  rsync -avm -L --exclude='*_test.py' ${PIP_FILE_PREFIX}tensorflow_ctc_beam_search_u_decoder "${TMPDIR}"
 
   pushd ${TMPDIR}
   echo $(date) : "=== Building wheel"

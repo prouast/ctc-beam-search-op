@@ -12,6 +12,11 @@ cc_binary(
     srcs = [
         "cc/kernels/ctc_beam_search_u_decoder_kernels.cc",
         "cc/ops/ctc_beam_search_u_decoder_ops.cc",
+        "cc/util/ctc_beam_search_u_decoder.h",
+        "cc/util/ctc_beam_scorer.h",
+        "cc/util/ctc_beam_entry.h",
+        "cc/util/ctc_loss_util.h",
+        "cc/util/ctc_u_decoder.h",
     ],
     linkshared = 1,
     deps = [
