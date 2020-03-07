@@ -69,8 +69,6 @@ template <typename T, typename CTCBeamState, typename CTCBeamComparer>
 template <typename Vector>
 void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
     const Vector& raw_input) {
-  // Number of character classes to consider in each step.
-  const int max_classes = this->num_classes_ - 1;
   // Get max coefficient and remove it from raw_input later.
   T max_coeff = raw_input.maxCoeff();
   // Get normalization term of softmax: log(sum(exp(logit[j]-max_coeff))).
@@ -159,7 +157,9 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
       continue;
     }
 
-    for (int ind = 0; ind < max_classes; ind++) {
+    for (int ind = 0; ind < this->num_classes_; ind++) {
+      // Skip the blank label class
+      if (ind == this->blank_index_) continue;
       const int label = ind;
       const T logit = raw_input(ind);
       // The new BeamEntry
