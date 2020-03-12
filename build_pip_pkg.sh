@@ -41,7 +41,7 @@ function main() {
   # directory.
   mkdir -p ${DEST}
   if [[ ${PLATFORM} == "darwin" ]]; then
-    DEST=$(pwd)/${DEST}
+    DEST=$(pwd -P)/${DEST}
   else
     DEST=$(readlink -f "${DEST}")
   fi
@@ -57,7 +57,7 @@ function main() {
   cp ${PIP_FILE_PREFIX}MANIFEST.in "${TMPDIR}"
   cp ${PIP_FILE_PREFIX}LICENSE "${TMPDIR}"
   touch "${TMPDIR}"/stub.cc
-  rsync -avm -L --exclude='*_test.py' ${PIP_FILE_PREFIX}tensorflow_ctc_beam_search_u_decoder "${TMPDIR}"
+  rsync -avm -L --exclude='*_test.py' ${PIP_FILE_PREFIX}tensorflow_ctc_ext_beam_search_decoder "${TMPDIR}"
 
   pushd ${TMPDIR}
   echo $(date) : "=== Building wheel"

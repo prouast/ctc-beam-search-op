@@ -1,1 +1,1 @@
-recursive-include tensorflow_ctc_beam_search_u_decoder/ *.so
+recursive-include tensorflow_ctc_ext_beam_search_decoder/ *.so

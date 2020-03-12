@@ -23,11 +23,11 @@ from setuptools import setup
 from setuptools.dist import Distribution
 
 
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 REQUIRED_PACKAGES = [
     'tensorflow >= 1.12.0',
 ]
-project_name = 'tensorflow-ctc-beam-search-u-decoder'
+project_name = 'tensorflow-ctc-ext-beam-search-decoder'
 
 
 class BinaryDistribution(Distribution):
@@ -40,7 +40,7 @@ class BinaryDistribution(Distribution):
 setup(
     name=project_name,
     version=__version__,
-    description=('tensorflow-ctc-beam-search-u-decoder is a custom tensorflow op for ctc beam search that keeps track of most probable uncollapsed sequence'),
+    description=('tensorflow-ctc-ext-beam-search-decoder is a custom tensorflow op for ctc beam search that keeps track of the best alignment for each beam'),
     author='Philipp Rouast',
     author_email='philipp@rouast.com',
     # Contained modules and scripts.

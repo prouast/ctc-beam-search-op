@@ -8,15 +8,15 @@ config_setting(
 )
 
 cc_binary(
-    name = 'python/ops/_ctc_beam_search_u_decoder_ops.so',
+    name = 'python/ops/_ctc_ext_beam_search_decoder_ops.so',
     srcs = [
-        "cc/kernels/ctc_beam_search_u_decoder_kernels.cc",
-        "cc/ops/ctc_beam_search_u_decoder_ops.cc",
-        "cc/util/ctc_beam_search_u_decoder.h",
+        "cc/kernels/ctc_ext_beam_search_decoder_kernels.cc",
+        "cc/ops/ctc_ext_beam_search_decoder_ops.cc",
+        "cc/util/ctc_ext_beam_search_decoder.h",
         "cc/util/ctc_beam_scorer.h",
         "cc/util/ctc_beam_entry.h",
         "cc/util/ctc_loss_util.h",
-        "cc/util/ctc_u_decoder.h",
+        "cc/util/ctc_ext_decoder.h",
     ],
     linkshared = 1,
     deps = [
@@ -34,37 +34,37 @@ cc_binary(
 )
 
 py_library(
-    name = "ctc_beam_search_u_decoder_ops_py",
+    name = "ctc_ext_beam_search_decoder_ops_py",
     srcs = ([
-        "python/ops/ctc_beam_search_u_decoder_ops.py",
+        "python/ops/ctc_ext_beam_search_decoder_ops.py",
     ]),
     data = [
-        ":python/ops/_ctc_beam_search_u_decoder_ops.so"
+        ":python/ops/_ctc_ext_beam_search_decoder_ops.so"
     ],
     srcs_version = "PY2AND3",
 )
 
 py_test(
-    name = "ctc_beam_search_u_decoder_py_test",
+    name = "ctc_ext_beam_search_decoder_py_test",
     srcs = [
-        "python/ops/ctc_beam_search_u_decoder_ops_test.py"
+        "python/ops/ctc_ext_beam_search_decoder_ops_test.py"
     ],
-    main = "python/ops/ctc_beam_search_u_decoder_ops_test.py",
+    main = "python/ops/ctc_ext_beam_search_decoder_ops_test.py",
     deps = [
-        ":ctc_beam_search_u_decoder_ops_py",
+        ":ctc_ext_beam_search_decoder_ops_py",
     ],
     srcs_version = "PY2AND3",
 )
 
 py_library(
-    name = "ctc_beam_search_u_decoder_py",
+    name = "ctc_ext_beam_search_decoder_py",
     srcs = ([
         "__init__.py",
         "python/__init__.py",
         "python/ops/__init__.py",
     ]),
     deps = [
-        ":ctc_beam_search_u_decoder_ops_py"
+        ":ctc_ext_beam_search_decoder_ops_py"
     ],
     srcs_version = "PY2AND3",
 )

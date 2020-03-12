@@ -1,15 +1,15 @@
 #define EIGEN_USE_THREADS
 
 #include <limits>
-#include "../util/ctc_beam_search_u_decoder.h"
+#include "../util/ctc_ext_beam_search_decoder.h"
 #include "tensorflow/core/framework/op_kernel.h"
 
 namespace tensorflow {
 
 template <typename T>
-class CTCBeamSearchUDecoderOp : public OpKernel {
+class CTCExtBeamSearchDecoderOp : public OpKernel {
   public:
-    explicit CTCBeamSearchUDecoderOp(OpKernelConstruction *ctx) : OpKernel(ctx) {
+    explicit CTCExtBeamSearchDecoderOp(OpKernelConstruction *ctx) : OpKernel(ctx) {
       OP_REQUIRES_OK(ctx, ctx->GetAttr("merge_repeated", &merge_repeated_));
       OP_REQUIRES_OK(ctx, ctx->GetAttr("beam_width", &beam_width_));
       OP_REQUIRES_OK(ctx, ctx->GetAttr("blank_index", &blank_index_));
@@ -24,13 +24,13 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
       OpOutputList dec_indices;
       OpOutputList dec_values;
       OpOutputList dec_shape;
-      OpOutputList dec_uncoll_indices;
-      OpOutputList dec_uncoll_values;
-      OpOutputList dec_uncoll_shape;
+      OpOutputList ali_indices;
+      OpOutputList ali_values;
+      OpOutputList ali_shape;
       Tensor* log_prob = nullptr;
       OP_REQUIRES_OK(ctx, ValidateInputsGenerateOutputs(ctx, &inputs, &seq_len,
         &log_prob, &dec_indices, &dec_values, &dec_shape,
-        &dec_uncoll_indices, &dec_uncoll_values, &dec_uncoll_shape));
+        &ali_indices, &ali_values, &ali_shape));
 
       // Save variables as specific types
       auto inputs_t = inputs->tensor<T, 3>();
@@ -52,7 +52,7 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
       }
 
       // The decoder
-      ctc::CTCBeamSearchUDecoder<T> decoder(num_classes, blank_index_,
+      ctc::CTCExtBeamSearchDecoder<T> decoder(num_classes, blank_index_,
                                             beam_width_, &beam_scorer_,
                                             blank_label_, 1, merge_repeated_);
 
@@ -61,15 +61,15 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
 
       // Store results
       std::vector<std::vector<std::vector<int>>> best_paths(batch_size);
-      std::vector<std::vector<std::vector<int>>> best_paths_uncoll(batch_size);
+      std::vector<std::vector<std::vector<int>>> best_alignments(batch_size);
       std::vector<T> log_probs;
 
       // Iterate over all batch elements
       for (int b = 0; b < batch_size; ++b) {
         auto& best_paths_b = best_paths[b];
-        auto& best_paths_uncoll_b = best_paths_uncoll[b];
+        auto& best_alignments_b = best_alignments[b];
         best_paths_b.resize(top_paths_);
-        best_paths_uncoll_b.resize(top_paths_);
+        best_alignments_b.resize(top_paths_);
         // Iterate over all time steps
         for (int t = 0; t < seq_len_t(b); ++t) {
           input_chip_t = input_list_t[t].chip(b, 0);
@@ -79,7 +79,7 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
         }
         // Get top paths
         OP_REQUIRES_OK(
-          ctx, decoder.TopPaths(top_paths_, &best_paths_b, &best_paths_uncoll_b,
+          ctx, decoder.TopPaths(top_paths_, &best_paths_b, &best_alignments_b,
                                 &log_probs, merge_repeated_));
         // beam search Reset
         decoder.Reset();
@@ -90,15 +90,15 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
       }
       // Store all decoded sequences
       OP_REQUIRES_OK(ctx, StoreAllDecodedSequences(
-        best_paths, best_paths_uncoll, &dec_indices, &dec_values, &dec_shape,
-        &dec_uncoll_indices, &dec_uncoll_values, &dec_uncoll_shape));
+        best_paths, best_alignments, &dec_indices, &dec_values, &dec_shape,
+        &ali_indices, &ali_values, &ali_shape));
     }
 
     Status ValidateInputsGenerateOutputs(OpKernelContext *ctx,
       const Tensor** inputs, const Tensor** seq_len, Tensor** log_prob,
       OpOutputList* dec_indices, OpOutputList* dec_values,
-      OpOutputList* dec_shape, OpOutputList* dec_uncoll_indices,
-      OpOutputList* dec_uncoll_values, OpOutputList* dec_uncoll_shape) const {
+      OpOutputList* dec_shape, OpOutputList* ali_indices,
+      OpOutputList* ali_values, OpOutputList* ali_shape) const {
       // Fetch inputs from context
       Status status = ctx->input("inputs", inputs);
       if (!status.ok()) return status;
@@ -138,7 +138,8 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
         }
       }
       // Allocate log probability output
-      Status s = ctx->allocate_output("log_probability", TensorShape({batch_size, top_paths_}), log_prob);
+      Status s = ctx->allocate_output("log_probability",
+        TensorShape({batch_size, top_paths_}), log_prob);
       if (!s.ok()) return s;
       // Allocate list of outputs for decoded
       s = ctx->output_list("decoded_indices", dec_indices);
@@ -147,12 +148,12 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
       if (!s.ok()) return s;
       s = ctx->output_list("decoded_shape", dec_shape);
       if (!s.ok()) return s;
-      // Allocate list of outputs for decoded uncollapsed
-      s = ctx->output_list("decoded_uncoll_indices", dec_uncoll_indices);
+      // Allocate list of outputs for alignments
+      s = ctx->output_list("alignment_indices", ali_indices);
       if (!s.ok()) return s;
-      s = ctx->output_list("decoded_uncoll_values", dec_uncoll_values);
+      s = ctx->output_list("alignment_values", ali_values);
       if (!s.ok()) return s;
-      s = ctx->output_list("decoded_uncoll_shape", dec_uncoll_shape);
+      s = ctx->output_list("alignment_shape", ali_shape);
       if (!s.ok()) return s;
       // Return OK
       return Status::OK();
@@ -161,62 +162,62 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
     // sequences[b][p][ix] stores decoded value "ix" of path "p" for batch "b".
     Status StoreAllDecodedSequences(
       const std::vector<std::vector<std::vector<int> > >& sequences,
-      const std::vector<std::vector<std::vector<int> > >& sequences_uncoll,
+      const std::vector<std::vector<std::vector<int> > >& alignments,
       OpOutputList* dec_indices, OpOutputList* dec_values,
-      OpOutputList* dec_shape, OpOutputList* dec_uncoll_indices,
-      OpOutputList* dec_uncoll_values, OpOutputList* dec_uncoll_shape) const {
+      OpOutputList* dec_shape, OpOutputList* ali_indices,
+      OpOutputList* ali_values, OpOutputList* ali_shape) const {
 
       // Calculate the total number of entries for each path
       const int64 batch_size = sequences.size();
-      std::vector<int64> num_entries(top_paths_, 0);
-      std::vector<int64> num_entries_uncoll(top_paths_, 0);
+      std::vector<int64> num_entries_dec(top_paths_, 0);
+      std::vector<int64> num_entries_ali(top_paths_, 0);
 
       // Calculate num_entries per path
       for (const auto& batch_s : sequences) {
         CHECK_EQ(batch_s.size(), top_paths_);
         for (int p = 0; p < top_paths_; ++p) {
-          num_entries[p] += batch_s[p].size();
+          num_entries_dec[p] += batch_s[p].size();
         }
       }
 
-      // Calculate num_entries per uncoll path
-      for (const auto& batch_s : sequences_uncoll) {
+      // Calculate num_entries per alignment
+      for (const auto& batch_s : alignments) {
         CHECK_EQ(batch_s.size(), top_paths_);
         for (int p = 0; p < top_paths_; ++p) {
-          num_entries_uncoll[p] += batch_s[p].size();
+          num_entries_ali[p] += batch_s[p].size();
         }
       }
 
       for (int p = 0; p < top_paths_; ++p) {
-        Tensor* p_indices = nullptr;
-        Tensor* p_values = nullptr;
-        Tensor* p_shape = nullptr;
-        Tensor* p_uncoll_indices = nullptr;
-        Tensor* p_uncoll_values = nullptr;
-        Tensor* p_uncoll_shape = nullptr;
+        Tensor* p_dec_indices = nullptr;
+        Tensor* p_dec_values = nullptr;
+        Tensor* p_dec_shape = nullptr;
+        Tensor* p_ali_indices = nullptr;
+        Tensor* p_ali_values = nullptr;
+        Tensor* p_ali_shape = nullptr;
 
-        const int64 p_num = num_entries[p];
-        const int64 p_num_uncoll = num_entries_uncoll[p];
+        const int64 p_num_dec = num_entries_dec[p];
+        const int64 p_num_ali = num_entries_ali[p];
 
-        Status s = dec_indices->allocate(p, TensorShape({p_num, 2}), &p_indices);
+        Status s = dec_indices->allocate(p, TensorShape({p_num_dec, 2}), &p_dec_indices);
         if (!s.ok()) return s;
-        s = dec_values->allocate(p, TensorShape({p_num}), &p_values);
+        s = dec_values->allocate(p, TensorShape({p_num_dec}), &p_dec_values);
         if (!s.ok()) return s;
-        s = dec_shape->allocate(p, TensorShape({2}), &p_shape);
+        s = dec_shape->allocate(p, TensorShape({2}), &p_dec_shape);
         if (!s.ok()) return s;
-        s = dec_uncoll_indices->allocate(p, TensorShape({p_num_uncoll, 2}), &p_uncoll_indices);
+        s = ali_indices->allocate(p, TensorShape({p_num_ali, 2}), &p_ali_indices);
         if (!s.ok()) return s;
-        s = dec_uncoll_values->allocate(p, TensorShape({p_num_uncoll}), &p_uncoll_values);
+        s = ali_values->allocate(p, TensorShape({p_num_ali}), &p_ali_values);
         if (!s.ok()) return s;
-        s = dec_uncoll_shape->allocate(p, TensorShape({2}), &p_uncoll_shape);
+        s = ali_shape->allocate(p, TensorShape({2}), &p_ali_shape);
         if (!s.ok()) return s;
 
-        auto indices_t = p_indices->matrix<int64>();
-        auto values_t = p_values->vec<int64>();
-        auto shape_t = p_shape->vec<int64>();
-        auto uncoll_indices_t = p_uncoll_indices->matrix<int64>();
-        auto uncoll_values_t = p_uncoll_values->vec<int64>();
-        auto uncoll_shape_t = p_uncoll_shape->vec<int64>();
+        auto dec_indices_t = p_dec_indices->matrix<int64>();
+        auto dec_values_t = p_dec_values->vec<int64>();
+        auto dec_shape_t = p_dec_shape->vec<int64>();
+        auto ali_indices_t = p_ali_indices->matrix<int64>();
+        auto ali_values_t = p_ali_values->vec<int64>();
+        auto ali_shape_t = p_ali_shape->vec<int64>();
 
         int64 max_decoded = 0;
         int64 offset = 0;
@@ -225,50 +226,50 @@ class CTCBeamSearchUDecoderOp : public OpKernel {
           auto& p_batch = sequences[b][p];
           int64 num_decoded = p_batch.size();
           max_decoded = std::max(max_decoded, num_decoded);
-          std::copy_n(p_batch.begin(), num_decoded, &values_t(offset));
+          std::copy_n(p_batch.begin(), num_decoded, &dec_values_t(offset));
           for (int64 t = 0; t < num_decoded; ++t, ++offset) {
-            indices_t(offset, 0) = b;
-            indices_t(offset, 1) = t;
+            dec_indices_t(offset, 0) = b;
+            dec_indices_t(offset, 1) = t;
           }
         }
 
-        shape_t(0) = batch_size;
-        shape_t(1) = max_decoded;
+        dec_shape_t(0) = batch_size;
+        dec_shape_t(1) = max_decoded;
 
         max_decoded = 0;
         offset = 0;
 
         for (int64 b = 0; b < batch_size; ++b) {
-          auto& p_batch = sequences_uncoll[b][p];
+          auto& p_batch = alignments[b][p];
           int64 num_decoded = p_batch.size();
           max_decoded = std::max(max_decoded, num_decoded);
-          std::copy_n(p_batch.begin(), num_decoded, &uncoll_values_t(offset));
+          std::copy_n(p_batch.begin(), num_decoded, &ali_values_t(offset));
           for (int64 t = 0; t < num_decoded; ++t, ++offset) {
-            uncoll_indices_t(offset, 0) = b;
-            uncoll_indices_t(offset, 1) = t;
+            ali_indices_t(offset, 0) = b;
+            ali_indices_t(offset, 1) = t;
           }
         }
 
-        uncoll_shape_t(0) = batch_size;
-        uncoll_shape_t(1) = max_decoded;
+        ali_shape_t(0) = batch_size;
+        ali_shape_t(1) = max_decoded;
       }
       return Status::OK();
     }
 
   private:
-    typename ctc::CTCBeamSearchUDecoder<T>::DefaultBeamScorer beam_scorer_;
+    typename ctc::CTCExtBeamSearchDecoder<T>::DefaultBeamScorer beam_scorer_;
     bool merge_repeated_;
     int beam_width_;
     int blank_index_;
     int blank_label_;
     int top_paths_;
-    TF_DISALLOW_COPY_AND_ASSIGN(CTCBeamSearchUDecoderOp);
+    TF_DISALLOW_COPY_AND_ASSIGN(CTCExtBeamSearchDecoderOp);
 };
 
 #define REGISTER_CPU(T)                                                       \
 REGISTER_KERNEL_BUILDER(                                                      \
-      Name("CTCBeamSearchUDecoder").Device(DEVICE_CPU).TypeConstraint<T>("T"),  \
-      CTCBeamSearchUDecoderOp<T>);
+      Name("CTCExtBeamSearchDecoder").Device(DEVICE_CPU).TypeConstraint<T>("T"),  \
+      CTCExtBeamSearchDecoderOp<T>);
 
 REGISTER_CPU(float);
 REGISTER_CPU(double);

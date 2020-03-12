@@ -44,13 +44,13 @@ struct BeamProbability {
 };
 
 template <typename T>
-struct BeamUncollCandidate {
-  BeamUncollCandidate() : prob(kLogZero<T>()) {}
-  BeamUncollCandidate(std::vector<int> l, T p) : prob(p), label_seq(l) {}
+struct BeamAlignmentCandidate {
+  BeamAlignmentCandidate() : prob(kLogZero<T>()) {}
+  BeamAlignmentCandidate(std::vector<int> l, T p) : prob(p), label_seq(l) {}
   T prob;
   std::vector<int> label_seq;
-  BeamUncollCandidate<T>* clone() const {
-    return new BeamUncollCandidate<T>(*this);
+  BeamAlignmentCandidate<T>* clone() const {
+    return new BeamAlignmentCandidate<T>(*this);
   }
   std::string Print() {
     std::stringstream ss;
@@ -66,24 +66,24 @@ struct BeamUncollCandidate {
 };
 
 template <class T>
-class BeamUncollCandidateComparer {
+class BeamAlignmentCandidateComparer {
  public:
-  virtual ~BeamUncollCandidateComparer() {}
-  virtual bool inline operator()(const BeamUncollCandidate<T>* a,
-                                 const BeamUncollCandidate<T>* b) const {
+  virtual ~BeamAlignmentCandidateComparer() {}
+  virtual bool inline operator()(const BeamAlignmentCandidate<T>* a,
+                                 const BeamAlignmentCandidate<T>* b) const {
     return a->prob < b->prob;
   }
 };
 
 template <typename T>
-struct BeamUncoll {
-  BeamUncoll() : cands_blank(), cands_nblank() {}
-  std::priority_queue<BeamUncollCandidate<T>*,
-    std::vector<BeamUncollCandidate<T>*>,
-    BeamUncollCandidateComparer<T>> cands_blank;
-  std::priority_queue<BeamUncollCandidate<T>*,
-    std::vector<BeamUncollCandidate<T>*>,
-    BeamUncollCandidateComparer<T>> cands_nblank;
+struct BeamAlignment {
+  BeamAlignment() : cands_blank(), cands_nblank() {}
+  std::priority_queue<BeamAlignmentCandidate<T>*,
+    std::vector<BeamAlignmentCandidate<T>*>,
+    BeamAlignmentCandidateComparer<T>> cands_blank;
+  std::priority_queue<BeamAlignmentCandidate<T>*,
+    std::vector<BeamAlignmentCandidate<T>*>,
+    BeamAlignmentCandidateComparer<T>> cands_nblank;
   void Reset() {
     while (!cands_blank.empty()) {
       cands_blank.pop();
@@ -92,12 +92,12 @@ struct BeamUncoll {
       cands_nblank.pop();
     }
   }
-  BeamUncollCandidate<T>* GetBlank() {
-    BeamUncollCandidate<T>* result = cands_blank.top();
+  BeamAlignmentCandidate<T>* GetBlank() {
+    BeamAlignmentCandidate<T>* result = cands_blank.top();
     return result;
   }
-  BeamUncollCandidate<T>* GetNBlank() {
-    BeamUncollCandidate<T>* result = cands_nblank.top();
+  BeamAlignmentCandidate<T>* GetNBlank() {
+    BeamAlignmentCandidate<T>* result = cands_nblank.top();
     return result;
   }
 };
@@ -137,7 +137,7 @@ struct BeamEntry {
     std::reverse(labels.begin(), labels.end());
     return labels;
   }
-  std::vector<int> LabelSeqUncoll() {
+  std::vector<int> AlignmentLabelSeq() {
     std::vector<int> labels;
     if (!new_cands.cands_blank.empty() && !new_cands.cands_nblank.empty()) {
       if (new_cands.GetBlank()->prob > new_cands.GetNBlank()->prob)
@@ -171,7 +171,7 @@ struct BeamEntry {
       std::cout << "[label=" << s << "; " << "oldp_blank=" << oldp.blank << "; " << "oldp_label=" << oldp.label << "; " << "oldp_total=" << oldp.total << "]" << std::endl;
     }
     if (full) {
-      BeamUncoll<T> cands = new_ ? new_cands : old_cands;
+      BeamAlignment<T> cands = new_ ? new_cands : old_cands;
       std::cout << "------- top blank ------" << std::endl;
       if (!cands.cands_blank.empty()) {
         std::cout << cands.GetBlank()->Print() << std::endl;
@@ -186,22 +186,22 @@ struct BeamEntry {
 
   BeamEntry<T, CTCBeamState>* parent;
   int label;
-  BeamUncoll<T> old_cands;
-  BeamUncoll<T> new_cands;
+  BeamAlignment<T> old_cands;
+  BeamAlignment<T> new_cands;
 
-  // Add a new UncollCandidate
-  void AddUncollCandidate(BeamEntry<T>* entry, bool from_blank, bool to_blank, int l, T p) {
-    // Get old UncollCandidate
-    BeamUncollCandidate<T>* old_uncoll = nullptr;
+  // Add a new AlignmentCandidate
+  void AddAlignmentCandidate(BeamEntry<T>* entry, bool from_blank, bool to_blank, int l, T p) {
+    // Get old AlignmentCandidate
+    BeamAlignmentCandidate<T>* old_cand = nullptr;
     if (from_blank && !entry->old_cands.cands_blank.empty())
-      old_uncoll = entry->old_cands.GetBlank();
+      old_cand = entry->old_cands.GetBlank();
     else if (!from_blank && !entry->old_cands.cands_nblank.empty())
-      old_uncoll = entry->old_cands.GetNBlank();
+      old_cand = entry->old_cands.GetNBlank();
     // Get old probability
     std::vector<int> old_label_seq;
     T old_prob;
-    if (old_uncoll == nullptr) {
-      // If no previous UncollCandidate exists, we will start a new one with
+    if (old_cand == nullptr) {
+      // If no previous AlignmentCandidate exists, we will start a new one with
       //  probability 0 if dealing with a new Beam in the first or second time
       //  step, otherwise with kLogZero
       if (parent == nullptr || parent->parent == nullptr && New()) {
@@ -210,23 +210,23 @@ struct BeamEntry {
         old_prob = kLogZero<T>();
       }
     } else {
-      // Build on the previous UncollCandidate
-      old_prob = old_uncoll->prob;
-      old_label_seq = old_uncoll->label_seq;
+      // Build on the previous AlignmentCandidate
+      old_prob = old_cand->prob;
+      old_label_seq = old_cand->label_seq;
     }
     // Concat the label
     std::vector<int> new_label_seq(old_label_seq);
     new_label_seq.push_back(l);
     // Add the probabilities since we are using log probabilities
     T new_prob = old_prob + p;
-    // New BeamUncollCandidate
-    BeamUncollCandidate<T>* new_uncoll = new BeamUncollCandidate<T>(
+    // New BeamAlignmentCandidate
+    BeamAlignmentCandidate<T>* new_cand = new BeamAlignmentCandidate<T>(
       new_label_seq, new_prob);
-    // Add new BeamUncollCandidate
+    // Add new BeamAlignmentCandidate
     if (to_blank) {
-      new_cands.cands_blank.push(new_uncoll);
+      new_cands.cands_blank.push(new_cand);
     } else {
-      new_cands.cands_nblank.push(new_uncoll);
+      new_cands.cands_nblank.push(new_cand);
     }
   }
 
@@ -260,9 +260,9 @@ class BeamRoot {
   BeamRoot& operator=(const BeamRoot&) = delete;
 
   BeamEntry<T, CTCBeamState>* AddEntry(BeamEntry<T, CTCBeamState>* p, int l) {
-    // Copy the UncollCandidate from parent if available
-    BeamUncollCandidate<T>* buc_b = nullptr;
-    BeamUncollCandidate<T>* buc_nb = nullptr;
+    // Copy the AlignmentCandidate from parent if available
+    BeamAlignmentCandidate<T>* buc_b = nullptr;
+    BeamAlignmentCandidate<T>* buc_nb = nullptr;
     auto* new_entry = new BeamEntry<T, CTCBeamState>(p, l, this);
     beam_entries_.emplace_back(new_entry);
     return new_entry;

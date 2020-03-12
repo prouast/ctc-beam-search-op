@@ -1,9 +1,8 @@
-// CTC beam search decoder that keeps track of most likely uncollapsed
-//  sequences
+// CTC beam search decoder that keeps track of best alignment per beam
 
 #include <vector>
 #include "ctc_beam_scorer.h"
-#include "ctc_u_decoder.h"
+#include "ctc_ext_decoder.h"
 #include "third_party/eigen3/Eigen/Core"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/gtl/top_n.h"
@@ -13,7 +12,7 @@ namespace ctc {
 
 template <typename T, typename CTCBeamState = ctc_beam_search::EmptyBeamState,
           typename CTCBeamComparer = ctc_beam_search::BeamComparer<T, CTCBeamState>>
-class CTCBeamSearchUDecoder : public CTCUDecoder<T> {
+class CTCExtBeamSearchDecoder : public CTCExtDecoder<T> {
 
   typedef ctc_beam_search::BeamEntry<T, CTCBeamState> BeamEntry;
   typedef ctc_beam_search::BeamRoot<T, CTCBeamState> BeamRoot;
@@ -24,17 +23,17 @@ class CTCBeamSearchUDecoder : public CTCUDecoder<T> {
     typedef BaseBeamScorer<T, CTCBeamState> DefaultBeamScorer;
 
     // Constructor
-    CTCBeamSearchUDecoder(int num_classes, int blank_index, int beam_width,
+    CTCExtBeamSearchDecoder(int num_classes, int blank_index, int beam_width,
                           BaseBeamScorer<T, CTCBeamState>* scorer,
                           int blank_label=1, int batch_size=1,
                           bool merge_repeated=false)
-        : CTCUDecoder<T>(num_classes, blank_index, batch_size, merge_repeated),
+        : CTCExtDecoder<T>(num_classes, blank_index, batch_size, merge_repeated),
           beam_width_(beam_width), leaves_(beam_width),
           beam_scorer_(CHECK_NOTNULL(scorer)), blank_label_(blank_label) {
       Reset();
     }
 
-    ~CTCBeamSearchUDecoder() override {}
+    ~CTCExtBeamSearchDecoder() override {}
 
     // Calculate the next step of the beam search and update the internal state.
     template <typename Vector>
@@ -50,7 +49,7 @@ class CTCBeamSearchUDecoder : public CTCUDecoder<T> {
 
     // Extract the top n paths at current time step
     Status TopPaths(int n, std::vector<std::vector<int>>* paths,
-                    std::vector<std::vector<int>>* paths_uncoll,
+                    std::vector<std::vector<int>>* alignments,
                     std::vector<T>* log_probs, bool merge_repeated) const;
 
   private:
@@ -61,13 +60,13 @@ class CTCBeamSearchUDecoder : public CTCUDecoder<T> {
     std::unique_ptr<BeamRoot> beam_root_;
     BaseBeamScorer<T, CTCBeamState>* beam_scorer_;
 
-    TF_DISALLOW_COPY_AND_ASSIGN(CTCBeamSearchUDecoder);
+    TF_DISALLOW_COPY_AND_ASSIGN(CTCExtBeamSearchDecoder);
 };
 
 // Run one sequence step of beam search
 template <typename T, typename CTCBeamState, typename CTCBeamComparer>
 template <typename Vector>
-void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
+void CTCExtBeamSearchDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
     const Vector& raw_input) {
   // Get max coefficient and remove it from raw_input later.
   T max_coeff = raw_input.maxCoeff();
@@ -103,8 +102,8 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
           b->newp.label = LogSumExp(b->newp.label,
             beam_scorer_->GetStateExpansionScore(b->state, b->parent->oldp.blank))
             + raw_input(b->label) - norm_offset;
-          b->AddUncollCandidate(b->parent, true, false, b->label,
-                                raw_input(b->label) - norm_offset);
+          b->AddAlignmentCandidate(b->parent, true, false, b->label,
+                                   raw_input(b->label) - norm_offset);
         } else {
           // If the last two sequence characters are not identical:
           //   Plabel(l=abc @ t=6) = (Plabel(l=abc @ t=5) + P(l=ab @ t=5))
@@ -112,27 +111,27 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
           b->newp.label = LogSumExp(b->newp.label,
             beam_scorer_->GetStateExpansionScore(b->state, b->parent->oldp.total))
             + raw_input(b->label) - norm_offset;
-          b->AddUncollCandidate(b->parent, true, false, b->label,
-                                raw_input(b->label) - norm_offset);
-          b->AddUncollCandidate(b->parent, false, false, b->label,
-                                raw_input(b->label) - norm_offset);
-          b->AddUncollCandidate(b, false, false, b->label,
-                                raw_input(b->label) - norm_offset);
+          b->AddAlignmentCandidate(b->parent, true, false, b->label,
+                                   raw_input(b->label) - norm_offset);
+          b->AddAlignmentCandidate(b->parent, false, false, b->label,
+                                   raw_input(b->label) - norm_offset);
+          b->AddAlignmentCandidate(b, false, false, b->label,
+                                   raw_input(b->label) - norm_offset);
         }
       } else {
         // Plabel(l=abc @ t=6) *= P(c @ 6)
         b->newp.label += raw_input(b->label) - norm_offset;
-        b->AddUncollCandidate(b, false, false, b->label,
-                              raw_input(b->label) - norm_offset);
+        b->AddAlignmentCandidate(b, false, false, b->label,
+                                 raw_input(b->label) - norm_offset);
       }
     }
     // Adding a blank to the entry
     // Pblank(l=abc @ t=6) = P(l=abc @ t=5) * P(- @ 6)
     b->newp.blank = b->oldp.total + raw_input(this->blank_index_) - norm_offset;
-    b->AddUncollCandidate(b, true, true, blank_label_,
-                          raw_input(this->blank_index_)-norm_offset);
-    b->AddUncollCandidate(b, false, true, blank_label_,
-                          raw_input(this->blank_index_)-norm_offset);
+    b->AddAlignmentCandidate(b, true, true, blank_label_,
+                             raw_input(this->blank_index_)-norm_offset);
+    b->AddAlignmentCandidate(b, false, true, blank_label_,
+                             raw_input(this->blank_index_)-norm_offset);
     // Calculate p_total = p_label + p_blank
     // P(l=abc @ t=6) = Plabel(l=abc @ t=6) + Pblank(l=abc @ t=6)
     b->newp.total = LogSumExp(b->newp.blank, b->newp.label);
@@ -173,14 +172,14 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
           //   Plabel(l=abcc @ t=6) = Pblank(l=abc @ t=5) * P(c @ 6)
           c.newp.label = logit - norm_offset +
             beam_scorer_->GetStateExpansionScore(c.state, b->oldp.blank);
-          c.AddUncollCandidate(b, true, false, label, logit - norm_offset);
+          c.AddAlignmentCandidate(b, true, false, label, logit - norm_offset);
         } else {
           // Otherwise:
           //   Plabel(l=abcd @ t=6) = P(l=abc @ t=5) * P(d @ 6)
           c.newp.label = logit - norm_offset +
             beam_scorer_->GetStateExpansionScore(c.state, b->oldp.total);
-          c.AddUncollCandidate(b, true, false, label, logit - norm_offset);
-          c.AddUncollCandidate(b, false, false, label, logit - norm_offset);
+          c.AddAlignmentCandidate(b, true, false, label, logit - norm_offset);
+          c.AddAlignmentCandidate(b, false, false, label, logit - norm_offset);
         }
         // P(l=abcd @ t=6) = Plabel(l=abcd @ t=6)
         c.newp.total = c.newp.label;
@@ -206,15 +205,10 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
       }
     }
   }
-  // Resolve candidates in each beam
-  //std::unique_ptr<std::vector<BeamEntry*>> branches_(leaves_.ExtractNondestructive());
-  //for (BeamEntry* b : *branches_) {
-  //  b->ResolveUncoll();
-  //}
 }
 
 template <typename T, typename CTCBeamState, typename CTCBeamComparer>
-void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Reset() {
+void CTCExtBeamSearchDecoder<T, CTCBeamState, CTCBeamComparer>::Reset() {
   leaves_.Reset();
 
   // This beam root, and all of its children, will be in memory until
@@ -231,12 +225,12 @@ void CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::Reset() {
 }
 
 template <typename T, typename CTCBeamState, typename CTCBeamComparer>
-Status CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::TopPaths(
+Status CTCExtBeamSearchDecoder<T, CTCBeamState, CTCBeamComparer>::TopPaths(
     int n, std::vector<std::vector<int>>* paths,
-    std::vector<std::vector<int>>* paths_uncoll, std::vector<T>* log_probs,
+    std::vector<std::vector<int>>* alignments, std::vector<T>* log_probs,
     bool merge_repeated) const {
   CHECK_NOTNULL(paths)->clear();
-  CHECK_NOTNULL(paths_uncoll)->clear();
+  CHECK_NOTNULL(alignments)->clear();
   CHECK_NOTNULL(log_probs)->clear();
   if (n > beam_width_) {
     return errors::InvalidArgument("requested more paths than the beam width.");
@@ -257,7 +251,7 @@ Status CTCBeamSearchUDecoder<T, CTCBeamState, CTCBeamComparer>::TopPaths(
 
   for (int i = 0; i < n; ++i) {
     BeamEntry* e((*branches)[i]);
-    paths_uncoll->push_back(e->LabelSeqUncoll());
+    alignments->push_back(e->AlignmentLabelSeq());
     paths->push_back(e->LabelSeq(merge_repeated));
     log_probs->push_back(e->newp.total);
   }

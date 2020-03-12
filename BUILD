@@ -5,6 +5,6 @@ sh_binary(
         "LICENSE",
         "MANIFEST.in",
         "setup.py",
-        "//tensorflow_ctc_beam_search_u_decoder:ctc_beam_search_u_decoder_py",
+        "//tensorflow_ctc_ext_beam_search_decoder:ctc_ext_beam_search_decoder_py",
     ],
 )

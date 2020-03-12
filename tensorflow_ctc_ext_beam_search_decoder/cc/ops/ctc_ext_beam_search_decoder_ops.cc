@@ -6,7 +6,7 @@ using shape_inference::DimensionHandle;
 using shape_inference::InferenceContext;
 using shape_inference::ShapeHandle;
 
-REGISTER_OP("CTCBeamSearchUDecoder")
+REGISTER_OP("CTCExtBeamSearchDecoder")
     .Input("inputs: T")
     .Input("sequence_length: int32")
     .Attr("beam_width: int >= 1")
@@ -17,9 +17,9 @@ REGISTER_OP("CTCBeamSearchUDecoder")
     .Output("decoded_indices: top_paths * int64")
     .Output("decoded_values: top_paths * int64")
     .Output("decoded_shape: top_paths * int64")
-    .Output("decoded_uncoll_indices: top_paths * int64")
-    .Output("decoded_uncoll_values: top_paths * int64")
-    .Output("decoded_uncoll_shape: top_paths * int64")
+    .Output("alignment_indices: top_paths * int64")
+    .Output("alignment_values: top_paths * int64")
+    .Output("alignment_shape: top_paths * int64")
     .Output("log_probability: T")
     .Attr("T: {float, double} = DT_FLOAT")
     .SetShapeFn([](InferenceContext* c) {
@@ -49,13 +49,13 @@ REGISTER_OP("CTCBeamSearchUDecoder")
       for (int i = 0; i < top_paths; ++i) {  // decoded_shape
         c->set_output(out_idx++, shape_v);
       }
-      for (int i = 0; i < top_paths; ++i) {  // decoded_uncoll_indices
+      for (int i = 0; i < top_paths; ++i) {  // alignment_indices
         c->set_output(out_idx++, c->Matrix(InferenceContext::kUnknownDim, 2));
       }
-      for (int i = 0; i < top_paths; ++i) {  // decoded_uncoll_values
+      for (int i = 0; i < top_paths; ++i) {  // alignment_values
         c->set_output(out_idx++, c->Vector(InferenceContext::kUnknownDim));
       }
-      for (int i = 0; i < top_paths; ++i) {  // decoded_uncoll_shape
+      for (int i = 0; i < top_paths; ++i) {  // alignment_shape
         c->set_output(out_idx++, shape_v);
       }
       c->set_output(out_idx++, c->Matrix(batch_size, top_paths)); // log_probability
