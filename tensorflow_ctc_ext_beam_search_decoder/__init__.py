@@ -16,4 +16,4 @@
 
 from __future__ import absolute_import
 
-from tensorflow_ext_ctc_beam_search_decoder.python.ops.ctc_ext_beam_search_decoder_ops import ctc_ext_beam_search_decoder
+from tensorflow_ctc_ext_beam_search_decoder.python.ops.ctc_ext_beam_search_decoder_ops import ctc_ext_beam_search_decoder
