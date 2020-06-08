@@ -6,6 +6,7 @@ from __future__ import print_function
 
 import numpy as np
 import math
+import psutil
 
 from tensorflow.python.platform import test
 try:
@@ -253,6 +254,24 @@ class CTCExtBeamSearchDecoderTest(test.TestCase):
                     sequence_length=[8], beam_width=10, blank_index=0,
                     top_paths=5, blank_label=0, merge_repeated=False)[6],
                 b=correct_log_probs)
+
+    def testCTCExtBeamSearchDecoderMem(self):
+      with self.test_session():
+        test_inputs = np.log(
+            [[[0.3, 0.5, 0.2]],
+             [[0.25, 0.6, 0.15]],
+             [[0.6, 0.2, 0.2]],
+             [[0.4, 0.35, 0.25]],
+             [[0.5, 0.4, 0.1]],
+             [[0.3, 0.3, 0.5]],
+             [[0.1, 0.2, 0.7]],
+             [[0.2, 0.3, 0.5]]])
+        mem_before = psutil.virtual_memory().used
+        ctc_ext_beam_search_decoder(inputs=test_inputs,
+          sequence_length=[8], beam_width=10, blank_index=0,
+          top_paths=5, blank_label=0, merge_repeated=False)
+        mem_after = psutil.virtual_memory().used
+        self.assertAlmostEqual(mem_before, mem_after)
 
 if __name__ == '__main__':
     test.main()
