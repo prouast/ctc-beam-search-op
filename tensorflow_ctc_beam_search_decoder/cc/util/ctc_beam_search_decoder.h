@@ -90,28 +90,34 @@ void CTCBeamSearchDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
 
   // Recursion step with existing branches
   for (BeamEntry* b : *branches) {
-    if (b->parent != nullptr) {  // if not the root
-      if (b->parent->Active()) {
-        // If last two sequence characters are identical:
-        //   Plabel(l=acc @ t=6) = (Plabel(l=acc @ t=5)
-        //                          + Pblank(l=ac @ t=5))
-        // else:
-        //   Plabel(l=abc @ t=6) = (Plabel(l=abc @ t=5)
-        //                          + P(l=ab @ t=5))
-        T previous = (b->label == b->parent->label) ? b->parent->oldp.blank
-                                                    : b->parent->oldp.total;
-        b->newp.label =
-            LogSumExp(b->newp.label,
-                      beam_scorer_->GetStateExpansionScore(b->state, previous));
+    if (b->parent != nullptr) {  // Non-empty beam (not the root) or consisting of only blank
+      if (b->parent->Active()) { // Previous label exists
+        if (b->label == b->parent->label) {
+          // If last two sequence characters are identical:
+          //   Plabel(l=acc @ t=6) = (Plabel(l=acc @ t=5) + Pblank(l=ac @ t=5))
+          //                         * P(c @ 6)
+          b->newp.label = LogSumExp(b->newp.label,
+            beam_scorer_->GetStateExpansionScore(b->state, b->parent->oldp.blank))
+            + raw_input(b->label) - norm_offset;
+        } else {
+          // If the last two sequence characters are not identical:
+          //   Plabel(l=abc @ t=6) = (Plabel(l=abc @ t=5) + P(l=ab @ t=5))
+          //                         * P(c @ 6)
+          b->newp.label = LogSumExp(b->newp.label,
+            beam_scorer_->GetStateExpansionScore(b->state, b->parent->oldp.total))
+            + raw_input(b->label) - norm_offset;
+        }
+      } else {
+        // Plabel(l=abc @ t=6) *= P(c @ 6)
+        b->newp.label += raw_input(b->label) - norm_offset;
       }
-      // Plabel(l=abc @ t=6) *= P(c @ 6)
-      b->newp.label += raw_input(b->label) - norm_offset;
     }
+    // Adding a blank to the entry
     // Pblank(l=abc @ t=6) = P(l=abc @ t=5) * P(- @ 6)
     b->newp.blank = b->oldp.total + raw_input(this->blank_index_) - norm_offset;
+    // Calculate p_total = p_label + p_blank
     // P(l=abc @ t=6) = Plabel(l=abc @ t=6) + Pblank(l=abc @ t=6)
     b->newp.total = LogSumExp(b->newp.blank, b->newp.label);
-
     // Push the entry back to the top paths list.
     // Note, this will always fill leaves back up in sorted order.
     leaves_.push(b);
@@ -141,16 +147,20 @@ void CTCBeamSearchDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
       // The new BeamEntry
       BeamEntry& c = b->GetChild(label);
       if (!c.Active()) {
-        //   Pblank(l=abcd @ t=6) = 0
+        // Pblank(l=abcd @ t=6) = 0
         c.newp.blank = kLogZero<T>();
-        // If new child label is identical to beam label:
-        //   Plabel(l=abcc @ t=6) = Pblank(l=abc @ t=5) * P(c @ 6)
-        // Otherwise:
-        //   Plabel(l=abcd @ t=6) = P(l=abc @ t=5) * P(d @ 6)
         beam_scorer_->ExpandState(b->state, b->label, &c.state, c.label);
-        T previous = (c.label == b->label) ? b->oldp.blank : b->oldp.total;
-        c.newp.label = logit - norm_offset +
-                       beam_scorer_->GetStateExpansionScore(c.state, previous);
+        if (c.label == b->label) {
+          // If new child label is identical to beam label:
+          //   Plabel(l=abcc @ t=6) = Pblank(l=abc @ t=5) * P(c @ 6)
+          c.newp.label = logit - norm_offset +
+            beam_scorer_->GetStateExpansionScore(c.state, b->oldp.blank);
+        } else {
+          // Otherwise:
+          //   Plabel(l=abcd @ t=6) = P(l=abc @ t=5) * P(d @ 6)
+          c.newp.label = logit - norm_offset +
+            beam_scorer_->GetStateExpansionScore(c.state, b->oldp.total);
+        }
         // P(l=abcd @ t=6) = Plabel(l=abcd @ t=6)
         c.newp.total = c.newp.label;
 
