@@ -1,7 +1,8 @@
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/shape_inference.h"
 
-using namespace tensorflow;
+namespace tensorflow {
+
 using shape_inference::DimensionHandle;
 using shape_inference::InferenceContext;
 using shape_inference::ShapeHandle;
@@ -49,3 +50,5 @@ REGISTER_OP("CTCBeamSearchDecoder_")
       c->set_output(out_idx++, c->Matrix(batch_size, top_paths)); // log_probability
       return Status::OK();
     });
+
+  }  // namespace tensorflow
