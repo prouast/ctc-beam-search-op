@@ -66,20 +66,20 @@ template <class T>
 class BeamAlignmentCandidateComparer {
  public:
   virtual ~BeamAlignmentCandidateComparer() {}
-  virtual bool inline operator()(const BeamAlignmentCandidate<T>* a,
-                                 const BeamAlignmentCandidate<T>* b) const {
-    return a->prob < b->prob;
+  virtual bool inline operator()(const BeamAlignmentCandidate<T> a,
+                                 const BeamAlignmentCandidate<T> b) const {
+    return a.prob < b.prob;
   }
 };
 
 template <typename T>
 struct BeamAlignment {
   BeamAlignment() : cands_blank(), cands_nblank() {}
-  std::priority_queue<BeamAlignmentCandidate<T>*,
-    std::vector<BeamAlignmentCandidate<T>*>,
+  std::priority_queue<BeamAlignmentCandidate<T>,
+    std::vector<BeamAlignmentCandidate<T>>,
     BeamAlignmentCandidateComparer<T>> cands_blank;
-  std::priority_queue<BeamAlignmentCandidate<T>*,
-    std::vector<BeamAlignmentCandidate<T>*>,
+  std::priority_queue<BeamAlignmentCandidate<T>,
+    std::vector<BeamAlignmentCandidate<T>>,
     BeamAlignmentCandidateComparer<T>> cands_nblank;
   void Reset() {
     while (!cands_blank.empty()) {
@@ -89,12 +89,12 @@ struct BeamAlignment {
       cands_nblank.pop();
     }
   }
-  BeamAlignmentCandidate<T>* GetBlank() {
-    BeamAlignmentCandidate<T>* result = cands_blank.top();
+  BeamAlignmentCandidate<T> GetBlank() {
+    BeamAlignmentCandidate<T> result = cands_blank.top();
     return result;
   }
-  BeamAlignmentCandidate<T>* GetNBlank() {
-    BeamAlignmentCandidate<T>* result = cands_nblank.top();
+  BeamAlignmentCandidate<T> GetNBlank() {
+    BeamAlignmentCandidate<T> result = cands_nblank.top();
     return result;
   }
 };
@@ -137,14 +137,14 @@ struct BeamEntry {
   std::vector<int> AlignmentLabelSeq() {
     std::vector<int> labels;
     if (!new_cands.cands_blank.empty() && !new_cands.cands_nblank.empty()) {
-      if (new_cands.GetBlank()->prob > new_cands.GetNBlank()->prob)
-        labels = new_cands.GetBlank()->label_seq;
+      if (new_cands.GetBlank().prob > new_cands.GetNBlank().prob)
+        labels = new_cands.GetBlank().label_seq;
       else
-        labels = new_cands.GetNBlank()->label_seq;
+        labels = new_cands.GetNBlank().label_seq;
     } else if (!new_cands.cands_blank.empty()) {
-      labels = new_cands.GetBlank()->label_seq;
+      labels = new_cands.GetBlank().label_seq;
     } else if (!new_cands.cands_nblank.empty()) {
-      labels = new_cands.GetNBlank()->label_seq;
+      labels = new_cands.GetNBlank().label_seq;
     } else {
       std::cout << "No label seq available" << std::endl;
     }
@@ -188,16 +188,20 @@ struct BeamEntry {
 
   // Add a new AlignmentCandidate
   void AddAlignmentCandidate(BeamEntry<T>* entry, bool from_blank, bool to_blank, int l, T p) {
-    // Get old AlignmentCandidate
-    BeamAlignmentCandidate<T>* old_cand = nullptr;
-    if (from_blank && !entry->old_cands.cands_blank.empty())
-      old_cand = entry->old_cands.GetBlank();
-    else if (!from_blank && !entry->old_cands.cands_nblank.empty())
-      old_cand = entry->old_cands.GetNBlank();
-    // Get old probability
+    BeamAlignmentCandidate<T> old_cand;
     std::vector<int> old_label_seq;
     T old_prob;
-    if (old_cand == nullptr) {
+    if (from_blank && !entry->old_cands.cands_blank.empty()) {
+      // Build on previous blank AlignmentCandidate
+      old_cand = entry->old_cands.GetBlank();
+      old_prob = old_cand.prob;
+      old_label_seq = old_cand.label_seq;
+    } else if (!from_blank && !entry->old_cands.cands_nblank.empty()) {
+      // Build on previous non-blank AlignmentCandidate
+      old_cand = entry->old_cands.GetNBlank();
+      old_prob = old_cand.prob;
+      old_label_seq = old_cand.label_seq;
+    } else {
       // If no previous AlignmentCandidate exists, we will start a new one with
       //  probability 0 if dealing with a new Beam in the first or second time
       //  step, otherwise with kLogZero
@@ -206,10 +210,6 @@ struct BeamEntry {
       } else {
         old_prob = kLogZero<T>();
       }
-    } else {
-      // Build on the previous AlignmentCandidate
-      old_prob = old_cand->prob;
-      old_label_seq = old_cand->label_seq;
     }
     // Concat the label
     std::vector<int> new_label_seq(old_label_seq);
@@ -217,7 +217,7 @@ struct BeamEntry {
     // Add the probabilities since we are using log probabilities
     T new_prob = old_prob + p;
     // New BeamAlignmentCandidate
-    BeamAlignmentCandidate<T>* new_cand = new BeamAlignmentCandidate<T>(
+    BeamAlignmentCandidate<T> new_cand = BeamAlignmentCandidate<T>(
       new_label_seq, new_prob);
     // Add new BeamAlignmentCandidate
     if (to_blank) {
