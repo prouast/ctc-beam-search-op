@@ -49,9 +49,6 @@ struct BeamAlignmentCandidate {
   BeamAlignmentCandidate(std::vector<int> l, T p) : prob(p), label_seq(l) {}
   T prob;
   std::vector<int> label_seq;
-  BeamAlignmentCandidate<T>* clone() const {
-    return new BeamAlignmentCandidate<T>(*this);
-  }
   std::string Print() {
     std::stringstream ss;
     ss << "[" << prob << ": [";
@@ -256,13 +253,10 @@ class BeamRoot {
   BeamRoot(BeamEntry<T, CTCBeamState>* p, int l) {
     root_entry_ = AddEntry(p, l);
   }
-  BeamRoot(const BeamRoot&) = delete;
-  BeamRoot& operator=(const BeamRoot&) = delete;
+  BeamRoot(const BeamRoot&) = delete; // Disallow copying
+  BeamRoot& operator=(const BeamRoot&) = delete; // Disallow copying
 
   BeamEntry<T, CTCBeamState>* AddEntry(BeamEntry<T, CTCBeamState>* p, int l) {
-    // Copy the AlignmentCandidate from parent if available
-    BeamAlignmentCandidate<T>* buc_b = nullptr;
-    BeamAlignmentCandidate<T>* buc_nb = nullptr;
     auto* new_entry = new BeamEntry<T, CTCBeamState>(p, l, this);
     beam_entries_.emplace_back(new_entry);
     return new_entry;
