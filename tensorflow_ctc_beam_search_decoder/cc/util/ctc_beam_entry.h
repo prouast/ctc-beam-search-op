@@ -10,6 +10,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#ifndef TENSORFLOW_CORE_UTIL_CTC_CTC_BEAM_ENTRY_H_
+#define TENSORFLOW_CORE_UTIL_CTC_CTC_BEAM_ENTRY_H_
+
 #include <algorithm>
 #include <memory>
 #include <vector>
@@ -135,3 +138,6 @@ class BeamComparer {
 }  // namespace ctc_beam_search
 }  // namespace ctc
 }  // namespace tensorflow
+
+#endif  // TENSORFLOW_CORE_UTIL_CTC_CTC_BEAM_ENTRY_H_
+// LINT.ThenChange(//tensorflow/lite/experimental/kernels/ctc_beam_entry.h)
