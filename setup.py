@@ -23,7 +23,7 @@ from setuptools import setup
 from setuptools.dist import Distribution
 
 
-__version__ = '0.1'
+__version__ = '0.2'
 REQUIRED_PACKAGES = []
 project_name = 'tensorflow-ctc-ext-beam-search-decoder'
 

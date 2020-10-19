@@ -104,6 +104,8 @@ void CTCExtBeamSearchDecoder<T, CTCBeamState, CTCBeamComparer>::Step(
             + raw_input(b->label) - norm_offset;
           b->AddAlignmentCandidate(b->parent, true, false, b->label,
                                    raw_input(b->label) - norm_offset);
+          b->AddAlignmentCandidate(b, false, false, b->label,
+                                   raw_input(b->label) - norm_offset);
         } else {
           // If the last two sequence characters are not identical:
           //   Plabel(l=abc @ t=6) = (Plabel(l=abc @ t=5) + P(l=ab @ t=5))
